@@ -9,7 +9,6 @@ const registrationSchema = new mongoose.Schema({
   email: {
     type: String,
     required: true,
-    // unique: true,
     trim: true,
     lowercase: true
   },
@@ -35,12 +34,12 @@ const registrationSchema = new mongoose.Schema({
   karateExperience: {
     type: String,
     enum: ['yes', 'no'],
-    required: true
+    // required: true
   },
   otherMartialArtsExperience: {
     type: String,
     enum: ['yes', 'no'],
-    required: true
+    // required: true
   },
   isFavorite: {
     type: Boolean,
