@@ -2,7 +2,7 @@ const Registration = require('../model/registrationModel');
 
 exports.createRegistration = async (req, res) => {
     try {
-        // Extract all fields we want to check
+        // Extract only the fields we want to check for duplicates
         const { 
             name, 
             email, 
@@ -14,43 +14,32 @@ exports.createRegistration = async (req, res) => {
             otherMartialArtsExperience 
         } = req.body;
 
-        // Create query object for exact duplicate check
-        const exactDuplicateQuery = {
-            $and: [
-                { name: name.trim() },
-                { email: email.trim().toLowerCase() },
-                { phone: phone.trim() },
-                { state: state.trim() },
-                { dob: new Date(dob) },
-                { gender: gender.toLowerCase() },
-                { karateExperience: karateExperience.toLowerCase() },
-                { otherMartialArtsExperience: otherMartialArtsExperience.toLowerCase() },
-                { isDeleted: false }
-            ]
+        // Create query object for duplicate check
+        const duplicateQuery = {
+            name: name.trim().toLowerCase(),
+            email: email.trim().toLowerCase(),
+            phone: phone.trim(),
+            state: state.trim().toLowerCase(),
+            dob: new Date(dob), // Convert to Date object for comparison
+            gender: gender.toLowerCase(),
+            karateExperience: karateExperience.toLowerCase(),
+            otherMartialArtsExperience: otherMartialArtsExperience.toLowerCase(),
+            isDeleted: false // Only check among non-deleted records
         };
 
-        // Check for exact duplicate (all fields match)
-        const existingRegistration = await Registration.findOne(exactDuplicateQuery);
+        // Check for exact duplicate
+        const existingRegistration = await Registration.findOne(duplicateQuery);
 
         if (existingRegistration) {
             return res.status(409).json({
                 success: false,
-                message: "This exact registration already exists. Please modify at least one field to create a new registration.",
+                message: "A registration with identical information already exists",
+                duplicateId: existingRegistration._id // Optional: Return the ID of the duplicate entry
             });
         }
 
-        // If not an exact duplicate, create new registration
-        const registration = new Registration({
-            name: name.trim(),
-            email: email.trim().toLowerCase(),
-            phone: phone.trim(),
-            state: state.trim(),
-            dob: new Date(dob),
-            gender: gender.toLowerCase(),
-            karateExperience: karateExperience.toLowerCase(),
-            otherMartialArtsExperience: otherMartialArtsExperience.toLowerCase()
-        });
-
+        // If no duplicate found, create new registration
+        const registration = new Registration(req.body);
         await registration.save();
 
         res.status(201).json({
@@ -64,6 +53,7 @@ exports.createRegistration = async (req, res) => {
         let errorMessage = "An error occurred while processing your registration";
         let statusCode = 400;
 
+        // Handle specific validation errors
         if (error.name === 'ValidationError') {
             errorMessage = Object.values(error.errors)
                 .map(err => err.message)
@@ -71,6 +61,7 @@ exports.createRegistration = async (req, res) => {
             statusCode = 422;
         }
 
+        // Handle other specific errors
         if (error.name === 'CastError') {
             errorMessage = 'Invalid data format provided';
             statusCode = 400;
@@ -79,6 +70,48 @@ exports.createRegistration = async (req, res) => {
         res.status(statusCode).json({
             success: false,
             message: errorMessage,
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
+    }
+};
+
+// Optional: Helper function to check for similar registrations
+exports.checkSimilarRegistrations = async (req, res) => {
+    try {
+        const { 
+            name, 
+            email, 
+            phone 
+        } = req.body;
+
+        // Create an OR query to find similar registrations
+        const similarQuery = {
+            $or: [
+                { email: email.trim().toLowerCase() },
+                { phone: phone.trim() },
+                { 
+                    name: {
+                        $regex: `^${name.trim()}$`,
+                        $options: 'i'
+                    }
+                }
+            ],
+            isDeleted: false
+        };
+
+        const similarRegistrations = await Registration.find(similarQuery)
+            .select('name email phone dob gender')
+            .limit(5);
+
+        return res.status(200).json({
+            success: true,
+            hasSimilar: similarRegistrations.length > 0,
+            similarRegistrations
+        });
+    } catch (error) {
+        res.status(400).json({
+            success: false,
+            message: "Error checking for similar registrations",
             error: process.env.NODE_ENV === 'development' ? error.message : undefined
         });
     }
