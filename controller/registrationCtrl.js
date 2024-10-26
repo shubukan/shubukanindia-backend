@@ -1,4 +1,4 @@
-const Registration = require('../model/registrationModel');
+const RegistrationModal = require('../model/registrationModel');
 const { createUserEmailTemplate, createAdminEmailTemplate } = require('../util/emailTemplate');
 const nodemailer = require('nodemailer');
 const { convert } = require('html-to-text');
@@ -22,7 +22,7 @@ exports.createRegistration = async (req, res) => {
   try {
       const { 
           name, 
-          email, 
+          xmail, 
           phone, 
           state, 
           dob, 
@@ -30,6 +30,9 @@ exports.createRegistration = async (req, res) => {
           karateExperience, 
           otherMartialArtsExperience 
       } = req.body;
+
+      console.log(req.body);
+      
 
       // This portion of code is not working
       // Check for duplicate registration
@@ -46,7 +49,7 @@ exports.createRegistration = async (req, res) => {
           isDeleted: false
       };
 
-      const existingRegistration = await Registration.findOne(duplicateQuery);
+      const existingRegistration = await RegistrationModal.findOne(duplicateQuery);
 
       if (existingRegistration) {
           return res.status(409).json({
@@ -58,13 +61,13 @@ exports.createRegistration = async (req, res) => {
       // ------------------------------------------------
 
       // Create new registration
-      const registration = new Registration(req.body);
+      const registration = new RegistrationModal(req.body);
         
       // Log the registration object before saving
       console.log('Registration object before save:', registration);
       
       try {
-          await registration.save();
+          await RegistrationModal.create(req.body);
       } catch (saveError) {
           // Log the specific save error
           console.error('Save error details:', {
@@ -90,13 +93,13 @@ exports.createRegistration = async (req, res) => {
       }
 
       // Send confirmation email to user
-      if (email && isValidEmail(email)) {
+      if (xmail && isValidEmail(xmail)) {
           const userEmailHtml = createUserEmailTemplate(name);
           const userEmailText = convert(userEmailHtml, { wordwrap: 130 });
 
           await transporter.sendMail({
               from: process.env.EMAIL_FROM,
-              to: email,
+              to: xmail,
               subject: 'Welcome to Shubukan India',
               html: userEmailHtml,
               text: userEmailText,
@@ -134,7 +137,7 @@ exports.createRegistration = async (req, res) => {
   // Get all registrations
   exports.getAllRegistrations = async (req, res) => {
     try {
-      const registrations = await Registration.find();
+      const registrations = await RegistrationModal.find();
       res.status(200).json({
         success: true,
         count: registrations.length,
@@ -151,7 +154,7 @@ exports.createRegistration = async (req, res) => {
   // Get single registration
   exports.getRegistration = async (req, res) => {
     try {
-      const registration = await Registration.findById(req.params.id);
+      const registration = await RegistrationModal.findById(req.params.id);
       if (!registration) {
         return res.status(404).json({
           success: false,
@@ -173,7 +176,7 @@ exports.createRegistration = async (req, res) => {
   // Update registration
   exports.updateRegistration = async (req, res) => {
     try {
-      const registration = await Registration.findByIdAndUpdate(
+      const registration = await RegistrationModal.findByIdAndUpdate(
         req.params.id,
         req.body,
         {
@@ -202,7 +205,7 @@ exports.createRegistration = async (req, res) => {
   // Delete registration
   exports.deleteRegistration = async (req, res) => {
     try {
-      const registration = await Registration.findByIdAndDelete(req.params.id);
+      const registration = await RegistrationModal.findByIdAndDelete(req.params.id);
       if (!registration) {
         return res.status(404).json({
           success: false,
