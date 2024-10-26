@@ -56,6 +56,22 @@ exports.createRegistration = async (req, res) => {
 
       // Create new registration
       const registration = new Registration(req.body);
+        
+      // Log the registration object before saving
+      console.log('Registration object before save:', registration);
+      
+      try {
+          await registration.save();
+      } catch (saveError) {
+          // Log the specific save error
+          console.error('Save error details:', {
+              name: saveError.name,
+              message: saveError.message,
+              errors: saveError.errors
+          });
+          throw saveError; // Re-throw to be caught by outer catch
+      }
+      
       await registration.save();
 
       // Send email to admin
