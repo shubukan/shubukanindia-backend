@@ -8,7 +8,7 @@ const registrationSchema = new mongoose.Schema({
         minlength: [2, 'Name must be at least 2 characters long'],
         maxlength: [100, 'Name cannot exceed 100 characters']
     },
-    email: {
+    xmail: {
         type: String,
         required: [true, 'Email is required'],
         trim: true,
