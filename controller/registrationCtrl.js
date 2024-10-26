@@ -31,10 +31,12 @@ exports.createRegistration = async (req, res) => {
           otherMartialArtsExperience 
       } = req.body;
 
-      // Check for duplicate registration (your existing code)
+      // This portion of code is not working
+      // Check for duplicate registration
+      // ------------------------------------------------
       const duplicateQuery = {
           name: name.trim().toLowerCase(),
-          email: email.trim().toLowerCase(),
+          // email: email.trim().toLowerCase(),
           phone: phone.trim(),
           state: state.trim().toLowerCase(),
           dob: new Date(dob),
@@ -53,6 +55,7 @@ exports.createRegistration = async (req, res) => {
               duplicateId: existingRegistration._id
           });
       }
+      // ------------------------------------------------
 
       // Create new registration
       const registration = new Registration(req.body);
@@ -71,8 +74,6 @@ exports.createRegistration = async (req, res) => {
           });
           throw saveError; // Re-throw to be caught by outer catch
       }
-      
-      await registration.save();
 
       // Send email to admin
       if (process.env.EMAIL_TO) {
@@ -96,7 +97,7 @@ exports.createRegistration = async (req, res) => {
           await transporter.sendMail({
               from: process.env.EMAIL_FROM,
               to: email,
-              subject: 'Welcome to Shubukan Karate Academy',
+              subject: 'Welcome to Shubukan India',
               html: userEmailHtml,
               text: userEmailText,
           });
