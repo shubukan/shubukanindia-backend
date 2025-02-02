@@ -9,6 +9,12 @@ const {
   updateRegistration,
   deleteRegistration,
 } = require("../controller/registrationCtrl");
+const {
+  createAdmin,
+  adminLogin,
+  adminValidate,
+} = require("../controller/adminCtrl");
+const { authMiddleware } = require("../middleware/authMiddleware");
 
 // Debug API
 router.get("/debug", (_, res) => {
@@ -20,13 +26,18 @@ router.get("/debug", (_, res) => {
 router.post("/createdojo", createDojo);
 router.get("/fetchdojo", fetchDojo);
 
-router.route('/registration')
-  .post(createRegistration)
-  .get(getAllRegistrations);
+router.route("/registration").post(createRegistration).get(getAllRegistrations);
 
-router.route('/registration/:id')
+router
+  .route("/registration/:id")
   .get(getRegistration)
   .put(updateRegistration)
   .delete(deleteRegistration);
+
+router
+  .route("/admin/auth")
+  // .post(createAdmin)
+  .post(adminLogin)
+  .get(authMiddleware, adminValidate);
 
 module.exports = router;
