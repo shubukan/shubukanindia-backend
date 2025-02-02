@@ -1,7 +1,6 @@
 const jwt = require("jsonwebtoken");
 const bcrypt = require("bcryptjs");
 const AdminModal = require("../model/adminModel");
-const SECRET_KEY = "xxxx-xxxx";
 
 exports.createAdmin = async (req, res) => {
   try {
@@ -49,11 +48,11 @@ exports.adminLogin = async (req, res) => {
     }
 
     // Add refresh token
-    const refreshToken = jwt.sign({ id: admin.id }, SECRET_KEY, {
+    const refreshToken = jwt.sign({ id: admin.id }, process.env.SECRET_KEY, {
       expiresIn: "7d",
     });
 
-    const token = jwt.sign({ id: admin.id }, SECRET_KEY, {
+    const token = jwt.sign({ id: admin.id }, process.env.SECRET_KEY, {
       expiresIn: "1h",
     });
 
@@ -75,5 +74,5 @@ exports.adminLogin = async (req, res) => {
 };
 
 exports.adminValidate = async (req, res) => {
-  res.json({ success: true });
+  return res.json({ success: true });
 };
