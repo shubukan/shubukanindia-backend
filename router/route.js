@@ -37,8 +37,18 @@ router
 router
   .route("/admin/auth")
   // .post(createAdmin)
-  .get(adminLogin);
+  .get((req, res, next) => {
+    console.log("Login Route - Body:", req.body);
+    next();
+  }, adminLogin);
 
-router.route("/admin/validate").get(authMiddleware, adminValidate);
+router.route("/admin/validate").get(
+  (req, res, next) => {
+    console.log("Validate Route - Headers:", req.headers);
+    next();
+  },
+  authMiddleware,
+  adminValidate
+);
 
 module.exports = router;
