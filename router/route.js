@@ -18,7 +18,7 @@ const { authMiddleware } = require("../middleware/authMiddleware");
 
 // Debug API
 router.get("/debug", (_, res) => {
-  let data = "😍 V1";
+  let data = "😍 V2";
   return res.send({ data: data });
 });
 
