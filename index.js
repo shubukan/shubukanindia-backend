@@ -7,10 +7,20 @@ const route = require("./router/route");
 // require("./db/connection")
 
 const app = express();
-app.options('*', cors());
+app.options("*", cors());
 app.use(
   cors({
-    origin: ["http://localhost:5173", "https://shubukanindia.org"],
+    origin: function (origin, callback) {
+      const allowedOrigins = [
+        "http://localhost:5173",
+        "https://shubukanindia.org",
+      ];
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error("CORS Not Allowed"));
+      }
+    },
     methods: ["GET", "POST", "PUT", "DELETE"],
     allowedHeaders: ["Content-Type", "Authorization"],
     credentials: true,
@@ -19,6 +29,12 @@ app.use(
 app.use(express.json());
 app.use(route);
 connectDB();
+
+app.use((req, res, next) => {
+  console.log("Incoming Request Headers:", req.headers);
+  console.log("Origin:", req.get("origin"));
+  next();
+});
 
 const PORT = process.env.PORT || 1234;
 
