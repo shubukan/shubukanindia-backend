@@ -7,15 +7,13 @@ const route = require("./router/route");
 // require("./db/connection")
 
 const app = express();
-
+app.options('*', cors());
 app.use(
   cors({
-    origin: [
-      "http://localhost:5173",
-      "https://shubukanindia.org",
-    ],
+    origin: ["http://localhost:5173", "https://shubukanindia.org"],
     methods: ["GET", "POST", "PUT", "DELETE"],
     allowedHeaders: ["Content-Type", "Authorization"],
+    credentials: true,
   })
 );
 app.use(express.json());
