@@ -37,7 +37,8 @@ router
 router
   .route("/admin/auth")
   // .post(createAdmin)
-  .post(adminLogin)
-  .get(authMiddleware, adminValidate);
+  .get(adminLogin);
+
+router.route("/admin/validate").get(authMiddleware, adminValidate);
 
 module.exports = router;
