@@ -34,21 +34,8 @@ router
   .put(updateRegistration)
   .delete(deleteRegistration);
 
-router
-  .route("/admin/auth")
-  // .post(createAdmin)
-  .get((req, res, next) => {
-    console.log("Login Route - Body:", req.body);
-    next();
-  }, adminLogin);
+router.post("/admin/auth", adminLogin);
 
-router.route("/admin/validate").get(
-  (req, res, next) => {
-    console.log("Validate Route - Headers:", req.headers);
-    next();
-  },
-  authMiddleware,
-  adminValidate
-);
+router.post("/admin/validate", authMiddleware, adminValidate);
 
 module.exports = router;
