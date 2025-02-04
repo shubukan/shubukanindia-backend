@@ -1,40 +1,37 @@
-const jwt = require('jsonwebtoken');
-const AdminModal = require('../model/adminModel');
+const jwt = require("jsonwebtoken");
+const AdminModal = require("../model/adminModel");
 
 exports.authMiddleware = async (req, res, next) => {
-  // try {
-  //   const token = req.headers.authorization?.split(' ')[1];
-    
-  //   if (!token) {
-  //     return res.status(401).json({
-  //       success: false,
-  //       error: 'No token provided'
-  //     });
-  //   }
+  try {
+    const token = req.body.token;
 
-  //   const decoded = jwt.verify(token, process.env.SECRET_KEY);
-  //   const admin = await AdminModal.findOne({ id: decoded.id });
-    
-  //   if (!admin) {
-  //     return res.status(401).json({
-  //       success: false,
-  //       error: 'Invalid token'
-  //     });
-  //   }
+    if (!token) {
+      return res.status(401).json({
+        success: false,
+        error: "No token provided",
+      });
+    }
 
-  //   // Add last active timestamp
-  //   admin.lastActive = new Date();
-  //   await admin.save();
+    const decoded = jwt.verify(token, process.env.SECRET_KEY);
+    const admin = await AdminModal.findOne({ id: decoded.id });
 
-  //   req.admin = admin;
-  //   next();
-  // } catch (error) {
-  //   return res.status(401).json({
-  //     success: false,
-  //     error: 'Invalid token'
-  //   });
-  // }
+    if (!admin) {
+      return res.status(401).json({
+        success: false,
+        error: "Invalid token",
+      });
+    }
 
-  console.log('Auth Middleware - Headers:', req.headers);
-  next();
+    // Add last active timestamp
+    admin.lastActive = new Date();
+    await admin.save();
+
+    req.admin = admin;
+    next();
+  } catch (error) {
+    return res.status(401).json({
+      success: false,
+      error: "Invalid token",
+    });
+  }
 };
