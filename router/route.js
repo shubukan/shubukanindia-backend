@@ -1,7 +1,12 @@
 const express = require("express");
 const router = express.Router();
 
-const { createDojo, fetchDojo } = require("../controller/dojoCtrl");
+const {
+  createDojo,
+  fetchAllDojo,
+  updateDojo,
+  deleteDojo,
+} = require("../controller/dojoCtrl");
 const {
   createRegistration,
   getAllRegistrations,
@@ -22,20 +27,25 @@ router.get("/debug", (_, res) => {
   return res.send({ data: data });
 });
 
-// ToDo APIs ---
-router.post("/createdojo", createDojo);
-router.get("/fetchdojo", fetchDojo);
+// Admin APIs ---
+router.post("/admin/auth", adminLogin);
+router.post("/admin/validate", authMiddleware, adminValidate);
 
+// Admin protected APIs ---
+
+// Dojo APIs ---
+router.post("/dojo", authMiddleware, createDojo);
+router.get("/dojo", fetchAllDojo);
+router.put("/dojo/:id", authMiddleware, updateDojo);
+router.delete("/dojo/:id", authMiddleware, deleteDojo);
+
+// Registration APIs ---
 router.route("/registration").post(createRegistration).get(getAllRegistrations);
 
 router
   .route("/registration/:id")
   .get(getRegistration)
-  .put(updateRegistration)
-  .delete(deleteRegistration);
-
-router.post("/admin/auth", adminLogin);
-
-router.post("/admin/validate", authMiddleware, adminValidate);
+  .put(authMiddleware, updateRegistration)
+  .delete(authMiddleware, deleteRegistration);
 
 module.exports = router;
