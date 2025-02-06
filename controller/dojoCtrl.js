@@ -1,48 +1,53 @@
 const dojoModel = require("../model/dojoModel");
 
+// Create a dojo
 exports.createDojo = async (req, res) => {
   try {
-    const data = req.body;
-
-    // let exData = await dojoModel.findOne({
-    //   $or: [{ reg: data.reg }, { name: data.name }],
-    // });
-
-    // if (exData) {
-    //   return res.status(200).send({
-    //     status: false,
-    //     message: "Registration no. / Dealer name already exist !",
-    //   });
-    // }
-
-    let createdData = await dojoModel.create(data);
-    return res.status(201).send({
-      status: true,
-      message: "dojo created successfully 😃",
-      data: createdData,
+    const dojo = req.body;
+    const createdDojo = await dojoModel.create({ ...dojo });
+    res.status(201).json({
+      success: true,
+      data: createdDojo,
     });
-  } catch (err) {
-    return res.status(500).send({
-      status: false,
-      message: "Internal Server Error!",
-      error: err.message,
-    });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
   }
 };
 
-exports.fetchDojo = async (req, res) => {
+// Fetch all dojos (excluding deleted ones)
+exports.fetchAllDojo = async (req, res) => {
   try {
-    const cars = await dojoModel.find();
+    const dojos = await dojoModel.find({ isDeleted: false });
+    return res.json(dojos);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
 
-    return res.status(200).send({
-      status: true,
-      data: cars,
+// Update a dojo
+exports.updateDojo = async (req, res) => {
+  try {
+    const dojo = await dojoModel.findByIdAndUpdate(req.params.id, req.body, {
+      new: true,
     });
-  } catch (err) {
-    return res.status(500).send({
-      status: false,
-      message: "Internal Server Error!",
-      error: err.message,
-    });
+    if (!dojo) return res.status(404).json({ message: "Dojo not found" });
+    return res.json(dojo);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+};
+
+// Soft delete a dojo
+exports.deleteDojo = async (req, res) => {
+  try {
+    const dojo = await dojoModel.findByIdAndUpdate(
+      req.params.id,
+      { isDeleted: true },
+      { new: true }
+    );
+    if (!dojo) return res.status(404).json({ message: "Dojo not found" });
+    return res.json({ message: "Dojo deleted successfully", dojo });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
   }
 };
