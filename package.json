@@ -18,12 +18,16 @@
   "homepage": "https://github.com/tathagatamishra/shubukanindia-backend#readme",
   "dependencies": {
     "bcryptjs": "^2.4.3",
+    "cloudinary": "^2.5.1",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.18.2",
     "html-to-text": "^9.0.5",
     "jsonwebtoken": "^9.0.2",
-    "mongoose": "^8.2.0",
+    "multer": "^1.4.5-lts.1",
     "nodemailer": "^6.9.15"
+  },
+  "devDependencies": {
+    "mongoose": "^8.10.0"
   }
 }
