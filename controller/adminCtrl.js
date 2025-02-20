@@ -48,11 +48,11 @@ exports.adminLogin = async (req, res) => {
     }
 
     // Add refresh token
-    const refreshToken = jwt.sign({ id: admin.id }, process.env.SECRET_KEY, {
+    const refreshToken = jwt.sign({ id: admin.id }, process.env.JWT_SECRET, {
       expiresIn: "7d",
     });
 
-    const token = jwt.sign({ id: admin.id }, process.env.SECRET_KEY, {
+    const token = jwt.sign({ id: admin.id }, process.env.JWT_SECRET, {
       expiresIn: "1h",
     });
 

@@ -1,6 +1,15 @@
 const express = require("express");
 const router = express.Router();
+const multer = require("multer");
+const upload = multer({ dest: "uploads/" });
 
+const {
+  createGallery,
+  getGallery,
+  updateGallery,
+  softDeleteGallery,
+  permanentDeleteGallery,
+} = require("../controller/galleryCtrl");
 const {
   createDojo,
   fetchAllDojo,
@@ -32,6 +41,13 @@ router.post("/admin/auth", adminLogin);
 router.post("/admin/validate", authMiddleware, adminValidate);
 
 // Admin protected APIs ---
+
+// Gallery APIs ---
+router.post("/gallery", upload.single("image"), createGallery);
+router.get("/gallery", getGallery);
+router.put("/gallery/:id", authMiddleware, upload.single("image"), updateGallery);
+router.delete("/gallery/soft/:id", authMiddleware, softDeleteGallery);
+router.delete("/gallery/perma/:id", authMiddleware, permanentDeleteGallery);
 
 // Dojo APIs ---
 router.post("/dojo", authMiddleware, createDojo);
