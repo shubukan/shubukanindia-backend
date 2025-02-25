@@ -59,7 +59,7 @@ exports.adminLogin = async (req, res) => {
     // Store refresh token in database
     admin.refreshToken = refreshToken;
     await admin.save();
-    console.log("user login");
+
     return res.status(200).json({
       success: true,
       token,
