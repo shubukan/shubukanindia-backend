@@ -60,6 +60,9 @@ exports.adminLogin = async (req, res) => {
     admin.refreshToken = refreshToken;
     await admin.save();
 
+    console.log("user login");
+    
+
     return res.status(200).json({
       success: true,
       token,
