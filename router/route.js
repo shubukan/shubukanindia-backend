@@ -1,7 +1,8 @@
 const express = require("express");
 const router = express.Router();
 const multer = require("multer");
-const upload = multer({ dest: "uploads/" });
+// Configure Multer to store files in memory
+const upload = multer({ storage: multer.memoryStorage() })
 
 const {
   createGallery,
