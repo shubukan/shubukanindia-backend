@@ -1,6 +1,58 @@
 const galleryModel = require("../model/galleryModel");
 const cloudinary = require("../config/cloudinary");
 
+
+exports.getCloudinarySignature = async (req, res) => {
+  try {
+    const timestamp = Math.round(new Date().getTime() / 1000);
+    
+    // Generate the signature
+    const signature = cloudinary.utils.api_sign_request(
+      {
+        timestamp: timestamp,
+        folder: "Shubukan/Gallery",
+      },
+      process.env.CLOUDINARY_API_SECRET
+    );
+    
+    // Return the necessary data for frontend
+    return res.json({
+      signature,
+      timestamp,
+      apiKey: process.env.CLOUDINARY_API_KEY,
+      cloudName: process.env.CLOUDINARY_CLOUD_NAME
+    });
+  } catch (error) {
+    return res.status(500).json({ message: error.message });
+  }
+};
+
+// save gallery data with a pre-uploaded image URL
+exports.createGalleryWithUrl = async (req, res) => {
+  try {
+    const { image, title, description, year, category, tags } = req.body;
+
+    if (!image) {
+      return res.status(400).json({ message: "Image URL is required" });
+    }
+
+    const gallery = await galleryModel.create({
+      image,
+      title,
+      description,
+      year,
+      category,
+      tags: Array.isArray(tags)
+        ? tags
+        : tags.split(",").map((tag) => tag.trim()),
+    });
+
+    return res.status(201).json(gallery);
+  } catch (error) {
+    return res.status(400).json({ message: error.message });
+  }
+};
+
 exports.createGallery = async (req, res) => {
   try {
     const { title, description, year, category, tags } = req.body;
@@ -26,9 +78,9 @@ exports.createGallery = async (req, res) => {
         : tags.split(",").map((tag) => tag.trim()),
     });
 
-    res.status(201).json(gallery);
+    return res.status(201).json(gallery);
   } catch (error) {
-    res.status(400).json({ message: error.message });
+    return res.status(400).json({ message: error.message });
   }
 };
 
@@ -60,14 +112,14 @@ exports.getGallery = async (req, res) => {
       galleryModel.countDocuments(query),
     ]);
 
-    res.json({
+    return res.json({
       items,
       total,
       currentPage: parseInt(page),
       totalPages: Math.ceil(total / limit),
     });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    return res.status(500).json({ message: error.message });
   }
 };
 
@@ -101,9 +153,9 @@ exports.updateGallery = async (req, res) => {
       return res.status(404).json({ message: "Gallery item not found" });
     }
 
-    res.json(gallery);
+    return res.json(gallery);
   } catch (error) {
-    res.status(400).json({ message: error.message });
+    return res.status(400).json({ message: error.message });
   }
 };
 
@@ -122,9 +174,9 @@ exports.softDeleteGallery = async (req, res) => {
       return res.status(404).json({ message: "Gallery item not found" });
     }
 
-    res.json({ message: "Gallery item soft deleted successfully" });
+    return res.json({ message: "Gallery item soft deleted successfully" });
   } catch (error) {
-    res.status(400).json({ message: error.message });
+    return res.status(400).json({ message: error.message });
   }
 };
 
@@ -153,8 +205,8 @@ exports.permanentDeleteGallery = async (req, res) => {
     // Delete from database
     await galleryModel.findByIdAndDelete(id);
 
-    res.json({ message: "Gallery item permanently deleted successfully" });
+    return res.json({ message: "Gallery item permanently deleted successfully" });
   } catch (error) {
-    res.status(400).json({ message: error.message });
+    return res.status(400).json({ message: error.message });
   }
 };
