@@ -2,7 +2,7 @@ const express = require("express");
 const router = express.Router();
 const multer = require("multer");
 // Configure Multer to store files in memory
-const upload = multer({ storage: multer.memoryStorage() })
+const upload = multer({ storage: multer.memoryStorage() });
 
 const {
   createGallery,
@@ -10,6 +10,8 @@ const {
   updateGallery,
   softDeleteGallery,
   permanentDeleteGallery,
+  getCloudinarySignature,
+  createGalleryWithUrl,
 } = require("../controller/galleryCtrl");
 const {
   createDojo,
@@ -44,9 +46,15 @@ router.post("/admin/validate", authMiddleware, adminValidate);
 // Admin protected APIs ---
 
 // Gallery APIs ---
-router.post("/gallery", upload.single("image"), createGallery);
+router.post("/gallery/signature", authMiddleware, getCloudinarySignature);
+router.post("/gallery", upload.single("image"), createGalleryWithUrl);
 router.get("/gallery", getGallery);
-router.put("/gallery/:id", authMiddleware, upload.single("image"), updateGallery);
+router.put(
+  "/gallery/:id",
+  authMiddleware,
+  upload.single("image"),
+  updateGallery
+);
 router.delete("/gallery/soft/:id", authMiddleware, softDeleteGallery);
 router.delete("/gallery/perma/:id", authMiddleware, permanentDeleteGallery);
 
