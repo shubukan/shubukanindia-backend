@@ -1,5 +1,6 @@
 const galleryModel = require("../model/galleryModel");
 const cloudinary = require("../config/cloudinary");
+const { shuffleArray } = require("../util/shuffle");
 
 
 exports.getCloudinarySignature = async (req, res) => {
@@ -107,13 +108,15 @@ exports.getGallery = async (req, res) => {
 
     const skip = (page - 1) * limit;
 
-    const [items, total] = await Promise.all([
+    const [images, total] = await Promise.all([
       galleryModel.find(query).sort(sortOptions).skip(skip).limit(parseInt(limit)),
       galleryModel.countDocuments(query),
     ]);
 
+    shuffleArray(images)
+
     return res.json({
-      items,
+      images,
       total,
       currentPage: parseInt(page),
       totalPages: Math.ceil(total / limit),
