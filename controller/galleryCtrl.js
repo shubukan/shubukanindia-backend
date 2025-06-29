@@ -87,7 +87,7 @@ exports.createGallery = async (req, res) => {
 
 exports.getGallery = async (req, res) => {
   try {
-    const { category, tags, year, sort, page = 1, limit = 10 } = req.query;
+    const { category, tags, year, sort, page = 1, limit = 200 } = req.query;
 
     // Build query
     const query = { isDeleted: false };
