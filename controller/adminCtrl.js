@@ -1,6 +1,6 @@
 const jwt = require("jsonwebtoken");
 const bcrypt = require("bcryptjs");
-const AdminModal = require("../model/adminModel");
+const AdminModel = require("../model/adminModel");
 
 exports.createAdmin = async (req, res) => {
   try {
@@ -8,7 +8,7 @@ exports.createAdmin = async (req, res) => {
 
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    const admin = await AdminModal.create({
+    const admin = await AdminModel.create({
       id,
       password: hashedPassword,
     });
@@ -29,7 +29,7 @@ exports.adminLogin = async (req, res) => {
   try {
     const { id, password } = req.body;
 
-    const admin = await AdminModal.findOne({ id });
+    const admin = await AdminModel.findOne({ id });
 
     if (!admin) {
       return res.status(404).json({

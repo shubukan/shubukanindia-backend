@@ -1,5 +1,5 @@
 const jwt = require("jsonwebtoken");
-const AdminModal = require("../model/adminModel");
+const AdminModel = require("../model/adminModel");
 
 exports.authMiddleware = async (req, res, next) => {
   try {
@@ -12,7 +12,7 @@ exports.authMiddleware = async (req, res, next) => {
     }
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const admin = await AdminModal.findOne({ id: decoded.id });
+    const admin = await AdminModel.findOne({ id: decoded.id });
 
     if (!admin) {
       return res.status(401).json({
