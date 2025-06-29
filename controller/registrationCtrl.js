@@ -1,4 +1,4 @@
-const RegistrationModal = require('../model/registrationModel');
+const RegistrationModel = require('../model/registrationModel');
 const { createUserEmailTemplate, createAdminEmailTemplate } = require('../util/emailTemplate');
 const nodemailer = require('nodemailer');
 const { convert } = require('html-to-text');
@@ -49,7 +49,7 @@ exports.createRegistration = async (req, res) => {
           isDeleted: false
       };
 
-      const existingRegistration = await RegistrationModal.findOne(duplicateQuery);
+      const existingRegistration = await RegistrationModel.findOne(duplicateQuery);
 
       if (existingRegistration) {
           return res.status(409).json({
@@ -61,13 +61,13 @@ exports.createRegistration = async (req, res) => {
       // ------------------------------------------------
 
       // Create new registration
-      const registration = new RegistrationModal(req.body);
+      const registration = new RegistrationModel(req.body);
         
       // Log the registration object before saving
       console.log('Registration object before save:', registration);
       
       try {
-          await RegistrationModal.create(req.body);
+          await RegistrationModel.create(req.body);
       } catch (saveError) {
           // Log the specific save error
           console.error('Save error details:', {
@@ -137,7 +137,7 @@ exports.createRegistration = async (req, res) => {
   // Get all registrations
   exports.getAllRegistrations = async (req, res) => {
     try {
-      const registrations = await RegistrationModal.find();
+      const registrations = await RegistrationModel.find();
       res.status(200).json({
         success: true,
         count: registrations.length,
@@ -154,7 +154,7 @@ exports.createRegistration = async (req, res) => {
   // Get single registration
   exports.getRegistration = async (req, res) => {
     try {
-      const registration = await RegistrationModal.findById(req.params.id);
+      const registration = await RegistrationModel.findById(req.params.id);
       if (!registration) {
         return res.status(404).json({
           success: false,
@@ -176,7 +176,7 @@ exports.createRegistration = async (req, res) => {
   // Update registration
   exports.updateRegistration = async (req, res) => {
     try {
-      const registration = await RegistrationModal.findByIdAndUpdate(
+      const registration = await RegistrationModel.findByIdAndUpdate(
         req.params.id,
         req.body,
         {
@@ -205,7 +205,7 @@ exports.createRegistration = async (req, res) => {
   // Delete registration
   exports.deleteRegistration = async (req, res) => {
     try {
-      const registration = await RegistrationModal.findByIdAndDelete(req.params.id);
+      const registration = await RegistrationModel.findByIdAndDelete(req.params.id);
       if (!registration) {
         return res.status(404).json({
           success: false,
