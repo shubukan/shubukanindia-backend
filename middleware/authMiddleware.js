@@ -1,15 +1,19 @@
+// middleware/authMiddleware.js
 const jwt = require("jsonwebtoken");
 const AdminModel = require("../model/adminModel");
 
 exports.authMiddleware = async (req, res, next) => {
   try {
-    const token = req.body.token;
-    if (!token) {
+    // Expecting: Authorization: Bearer <token>
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
       return res.status(401).json({
         success: false,
         error: "No token provided",
       });
     }
+
+    const token = authHeader.split(" ")[1]; // extract token after "Bearer"
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     const admin = await AdminModel.findOne({ id: decoded.id });
@@ -21,7 +25,7 @@ exports.authMiddleware = async (req, res, next) => {
       });
     }
 
-    // Add last active timestamp
+    // Track activity
     admin.lastActive = new Date();
     await admin.save();
 
