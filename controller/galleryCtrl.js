@@ -1,12 +1,10 @@
 const galleryModel = require("../model/galleryModel");
 const cloudinary = require("../config/cloudinary");
-const { shuffleArray } = require("../util/shuffle");
-
 
 exports.getCloudinarySignature = async (req, res) => {
   try {
     const timestamp = Math.round(new Date().getTime() / 1000);
-    
+
     // Generate the signature
     const signature = cloudinary.utils.api_sign_request(
       {
@@ -15,61 +13,48 @@ exports.getCloudinarySignature = async (req, res) => {
       },
       process.env.CLOUDINARY_API_SECRET
     );
-    
+
     // Return the necessary data for frontend
     return res.json({
       signature,
       timestamp,
       apiKey: process.env.CLOUDINARY_API_KEY,
-      cloudName: process.env.CLOUDINARY_CLOUD_NAME
+      cloudName: process.env.CLOUDINARY_CLOUD_NAME,
     });
   } catch (error) {
     return res.status(500).json({ message: error.message });
   }
 };
 
+// This api is in use
 // save gallery data with a pre-uploaded image URL
 exports.createGalleryWithUrl = async (req, res) => {
+  let publicId = null;
+
   try {
+    // image: String
+    // In frontend, uploading image in Cloudinary > get image url
     const { image, title, description, year, category, tags } = req.body;
 
     if (!image) {
       return res.status(400).json({ message: "Image URL is required" });
     }
 
-    const gallery = await galleryModel.create({
-      image,
-      title,
-      description,
-      year,
-      category,
-      tags: Array.isArray(tags)
-        ? tags
-        : tags.split(",").map((tag) => tag.trim()),
-    });
-
-    return res.status(201).json(gallery);
-  } catch (error) {
-    return res.status(400).json({ message: error.message });
-  }
-};
-
-exports.createGallery = async (req, res) => {
-  try {
-    const { title, description, year, category, tags } = req.body;
-
-    if (!req.file) {
-      return res.status(400).json({ message: "Image is required" });
+    const parts = image.split("/upload/");
+    if (parts.length < 2) {
+      return res.status(400).json({ message: "Invalid Cloudinary URL format" });
     }
 
-    // Convert buffer to base64
-    const base64Image = `data:${req.file.mimetype};base64,${req.file.buffer.toString("base64")}`;
+    const afterUpload = parts[1];
+    const withoutVersion = afterUpload.replace(/^v\d+\//, "");
+    publicId = withoutVersion.substring(0, withoutVersion.lastIndexOf("."));
 
-    // Upload to Cloudinary
-    const result = await cloudinary.uploader.upload(base64Image, {folder: "Shubukan/Gallery"});
+    const imgDetails = await cloudinary.api.resource(publicId);
 
     const gallery = await galleryModel.create({
-      image: result.secure_url,
+      image,
+      width: imgDetails.width,
+      height: imgDetails.height,
       title,
       description,
       year,
@@ -81,13 +66,26 @@ exports.createGallery = async (req, res) => {
 
     return res.status(201).json(gallery);
   } catch (error) {
+    // If MongoDB save failed but image was uploaded, remove it from Cloudinary
+    if (publicId) {
+      try {
+        // if MongoDB save fails after the Cloudinary upload, delete the file from Cloudinary before sending the error.
+        await cloudinary.uploader.destroy(publicId);
+      } catch (cleanupError) {
+        console.error(
+          "Failed to delete orphan image from Cloudinary:",
+          cleanupError
+        );
+      }
+    }
+    console.error(error);
     return res.status(400).json({ message: error.message });
   }
 };
 
 exports.getGallery = async (req, res) => {
   try {
-    const { category, tags, year, sort, page = 1, limit = 200 } = req.query;
+    const { category, tags, year, sort, page = 1, limit = 20 } = req.query;
 
     // Build query
     const query = { isDeleted: false };
@@ -109,11 +107,13 @@ exports.getGallery = async (req, res) => {
     const skip = (page - 1) * limit;
 
     const [images, total] = await Promise.all([
-      galleryModel.find(query).sort(sortOptions).skip(skip).limit(parseInt(limit)),
+      galleryModel
+        .find(query)
+        .sort(sortOptions)
+        .skip(skip)
+        .limit(parseInt(limit)),
       galleryModel.countDocuments(query),
     ]);
-
-    shuffleArray(images)
 
     return res.json({
       images,
@@ -129,7 +129,7 @@ exports.getGallery = async (req, res) => {
 exports.updateGallery = async (req, res) => {
   try {
     const { id } = req.params;
-    const { title, description, year, category, tags } = req.body;
+    const { title, description, year, category, tags, image } = req.body;
 
     const updateData = {
       title,
@@ -141,11 +141,25 @@ exports.updateGallery = async (req, res) => {
         : tags.split(",").map((tag) => tag.trim()),
     };
 
-    // If new image is uploaded
-    if (req.file) {
-      const base64Image = `data:${req.file.mimetype};base64,${req.file.buffer.toString("base64")}`;
-      const result = await cloudinary.uploader.upload(base64Image, {folder: "Shubukan/Gallery"});
-      updateData.image = result.secure_url;
+    if (image) {
+      // Extract public ID from Cloudinary URL
+      const parts = image.split("/upload/");
+      if (parts.length >= 2) {
+        const afterUpload = parts[1];
+        const withoutVersion = afterUpload.replace(/^v\d+\//, "");
+        const publicId = withoutVersion.substring(
+          0,
+          withoutVersion.lastIndexOf(".")
+        );
+
+        // the same cloudinary.api.resource logic you used in createGalleryWithUrl to get width & height.
+        // Get image dimensions from Cloudinary
+        const imgDetails = await cloudinary.api.resource(publicId);
+
+        updateData.image = image;
+        updateData.width = imgDetails.width;
+        updateData.height = imgDetails.height;
+      }
     }
 
     const gallery = await galleryModel.findByIdAndUpdate(id, updateData, {
@@ -195,12 +209,12 @@ exports.permanentDeleteGallery = async (req, res) => {
     }
 
     // Extract public_id from Cloudinary URL
-    const urlParts = gallery.image.split('/');
-    const folderIndex = urlParts.indexOf('Shubukan');
+    const urlParts = gallery.image.split("/");
+    const folderIndex = urlParts.indexOf("Shubukan");
     const publicId = urlParts
       .slice(folderIndex, urlParts.length)
-      .join('/')
-      .split('.')[0];
+      .join("/")
+      .split(".")[0];
 
     // Delete from Cloudinary
     await cloudinary.uploader.destroy(publicId);
@@ -208,7 +222,9 @@ exports.permanentDeleteGallery = async (req, res) => {
     // Delete from database
     await galleryModel.findByIdAndDelete(id);
 
-    return res.json({ message: "Gallery item permanently deleted successfully" });
+    return res.json({
+      message: "Gallery item permanently deleted successfully",
+    });
   } catch (error) {
     return res.status(400).json({ message: error.message });
   }
