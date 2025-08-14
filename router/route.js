@@ -54,7 +54,7 @@ router.post("/admin/validate", authMiddleware, adminValidate);
 
 // Gallery APIs ---
 router.post("/gallery/signature", authMiddleware, getCloudinarySignature);
-router.post("/gallery", createGalleryWithUrl);
+router.post("/gallery", authMiddleware, createGalleryWithUrl);
 router.get("/gallery", getGallery);
 router.put("/gallery/:id", authMiddleware, updateGallery);
 router.delete("/gallery/soft/:id", authMiddleware, softDeleteGallery);
@@ -68,10 +68,10 @@ router.delete("/dojo/:id", authMiddleware, deleteDojo);
 
 // Marksheet APIs ---
 // router.post("/marksheetpage", createMarksheetPage)
-router.get("/marksheetpage", getMarksheetPage)
-router.put("/marksheetpage", updateMarksheetPage)
-router.post("/marksheet", createMarksheet)
-router.get("/marksheet", getAMarksheet)
+router.get("/marksheetpage", getMarksheetPage);
+router.put("/marksheetpage", updateMarksheetPage);
+router.post("/marksheet", createMarksheet);
+router.get("/marksheet", getAMarksheet);
 
 // Registration APIs ---
 router.route("/registration").post(createRegistration).get(getAllRegistrations);
