@@ -27,11 +27,13 @@ const {
   deleteRegistration,
 } = require("../controller/registrationCtrl");
 const {
-  createMarksheetPage,
-  getMarksheetPage,
-  updateMarksheetPage,
+  // createMarksheetPage,
+  // getMarksheetPage,
+  // updateMarksheetPage,
   createMarksheet,
   getAMarksheet,
+  getMarksheetSignature,
+  deleteMarksheet,
 } = require("../controller/marksheetCtrl");
 const {
   createAdmin,
@@ -68,10 +70,13 @@ router.delete("/dojo/:id", authMiddleware, deleteDojo);
 
 // Marksheet APIs ---
 // router.post("/marksheetpage", createMarksheetPage)
-router.get("/marksheetpage", getMarksheetPage);
-router.put("/marksheetpage", updateMarksheetPage);
-router.post("/marksheet", createMarksheet);
+// router.get("/marksheetpage", getMarksheetPage);
+// router.put("/marksheetpage", updateMarksheetPage);
+router.post("/marksheet/signature", authMiddleware, getMarksheetSignature);
+router.post("/marksheet", authMiddleware, createMarksheet);
+router.put("/marksheet", authMiddleware, createMarksheet);
 router.get("/marksheet", getAMarksheet);
+router.delete("/marksheet/:id", authMiddleware, deleteMarksheet);
 
 // Registration APIs ---
 router.route("/registration").post(createRegistration).get(getAllRegistrations);
