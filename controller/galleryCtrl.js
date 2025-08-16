@@ -131,6 +131,12 @@ exports.updateGallery = async (req, res) => {
     const { id } = req.params;
     const { title, description, year, category, tags, image } = req.body;
 
+    // Find existing gallery item
+    const existingGallery = await galleryModel.findById(id);
+    if (!existingGallery) {
+      return res.status(404).json({ message: "Gallery item not found" });
+    }
+
     const updateData = {
       title,
       description,
@@ -141,8 +147,25 @@ exports.updateGallery = async (req, res) => {
         : tags.split(",").map((tag) => tag.trim()),
     };
 
-    if (image) {
+    if (image && image !== existingGallery.image) {
+      // --- 1. Delete old image from Cloudinary ---
       // Extract public ID from Cloudinary URL
+      if (existingGallery.image) {
+        try {
+          const oldUrlParts = existingGallery.image.split("/");
+          const folderIndex = oldUrlParts.indexOf("Shubukan");
+          const oldPublicId = oldUrlParts
+            .slice(folderIndex, oldUrlParts.length)
+            .join("/")
+            .split(".")[0];
+
+          await cloudinary.uploader.destroy(oldPublicId);
+        } catch (err) {
+          console.error("Failed to delete old Cloudinary image:", err);
+        }
+      }
+
+      // --- 2. Save new image details ---
       const parts = image.split("/upload/");
       if (parts.length >= 2) {
         const afterUpload = parts[1];
@@ -152,26 +175,26 @@ exports.updateGallery = async (req, res) => {
           withoutVersion.lastIndexOf(".")
         );
 
+        const imgDetails = await cloudinary.api.resource(publicId);
         // the same cloudinary.api.resource logic you used in createGalleryWithUrl to get width & height.
         // Get image dimensions from Cloudinary
-        const imgDetails = await cloudinary.api.resource(publicId);
-
         updateData.image = image;
         updateData.width = imgDetails.width;
         updateData.height = imgDetails.height;
       }
     }
 
-    const gallery = await galleryModel.findByIdAndUpdate(id, updateData, {
-      new: true,
-    });
+    const updatedGallery = await galleryModel.findByIdAndUpdate(
+      id,
+      updateData,
+      {
+        new: true,
+      }
+    );
 
-    if (!gallery) {
-      return res.status(404).json({ message: "Gallery item not found" });
-    }
-
-    return res.json(gallery);
+    return res.json(updatedGallery);
   } catch (error) {
+    console.error("Update error:", error);
     return res.status(400).json({ message: error.message });
   }
 };
