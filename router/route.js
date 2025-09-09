@@ -1,9 +1,24 @@
 const express = require("express");
 const router = express.Router();
-const multer = require("multer");
-// Configure Multer to store files in memory
-const upload = multer({ storage: multer.memoryStorage() });
+const crypto = require("crypto");
 
+const { authMiddleware } = require("../middleware/authMiddleware");
+const { emailAuth } = require("../middleware/emailAuth");
+const { sendEmail } = require("../util/sendEmail");
+const { blogOtpEmailTemplate } = require("../util/emailTemplate");
+const { addVerifiedUser } = require("../middleware/emailAuth");
+const {
+  createBlog,
+  getBlogs,
+  getBlogBySlug,
+  updateBlog,
+  softDeleteBlog,
+  permanentDeleteBlog,
+  likeBlog,
+  dislikeBlog,
+  addComment,
+  replyComment,
+} = require("../controller/blogCtrl");
 const {
   createGallery,
   getGallery,
@@ -27,9 +42,6 @@ const {
   deleteRegistration,
 } = require("../controller/registrationCtrl");
 const {
-  // createMarksheetPage,
-  // getMarksheetPage,
-  // updateMarksheetPage,
   createMarksheet,
   getAMarksheet,
   getMarksheetSignature,
@@ -40,7 +52,6 @@ const {
   adminLogin,
   adminValidate,
 } = require("../controller/adminCtrl");
-const { authMiddleware } = require("../middleware/authMiddleware");
 
 // Debug API
 router.get("/debug", (_, res) => {
@@ -52,7 +63,61 @@ router.get("/debug", (_, res) => {
 router.post("/admin/auth", adminLogin);
 router.post("/admin/validate", authMiddleware, adminValidate);
 
-// Admin protected APIs ---
+// Temporary in-memory store (better: Redis or DB)
+const otpStore = new Map();
+
+// Send OTP
+router.post("/send-otp", async (req, res) => {
+  const { email } = req.body;
+  if (!email) return res.status(400).json({ message: "Email required" });
+
+  const otp = Math.floor(100000 + Math.random() * 900000).toString();
+  otpStore.set(email, { otp, expiresAt: Date.now() + 5 * 60 * 1000 });
+
+  const html = blogOtpEmailTemplate(otp);
+  await sendEmail(email, "Verify your email - Shubukan India", html);
+
+  res.json({ message: "OTP sent to email" });
+});
+
+// Verify OTP
+router.post("/verify-otp", (req, res) => {
+  const { email, otp } = req.body;
+  const data = otpStore.get(email);
+
+  if (!data) return res.status(400).json({ message: "No OTP sent" });
+  if (Date.now() > data.expiresAt)
+    return res.status(400).json({ message: "OTP expired" });
+  if (data.otp !== otp) return res.status(400).json({ message: "Invalid OTP" });
+
+  otpStore.delete(email);
+
+  // Generate a simple session token (or JWT if you want)
+  const token = crypto.randomBytes(16).toString("hex");
+
+  // ✅ Save session in verified users list
+  addVerifiedUser(email, token);
+
+  res.json({ message: "Email verified", token });
+});
+
+// Public Blog APIs
+router.get("/blogs", getBlogs);
+router.get("/blog/:slug", getBlogBySlug);
+
+// Likes/Dislikes
+router.post("/blog/:id/like", emailAuth, likeBlog);
+router.post("/blog/:id/dislike", emailAuth, dislikeBlog);
+
+// Comments
+router.post("/blog/:id/comment", emailAuth, addComment);
+router.post("/blog/:id/comment/:commentId/reply", emailAuth, replyComment);
+
+// Admin Blog APIs
+router.post("/blog", createBlog);
+router.put("/blog/:id", authMiddleware, updateBlog);
+router.delete("/blog/soft/:id", authMiddleware, softDeleteBlog);
+router.delete("/blog/perma/:id", authMiddleware, permanentDeleteBlog);
 
 // Gallery APIs ---
 router.post("/gallery/signature", authMiddleware, getCloudinarySignature);
@@ -69,9 +134,6 @@ router.put("/dojo/:id", authMiddleware, updateDojo);
 router.delete("/dojo/:id", authMiddleware, deleteDojo);
 
 // Marksheet APIs ---
-// router.post("/marksheetpage", createMarksheetPage)
-// router.get("/marksheetpage", getMarksheetPage);
-// router.put("/marksheetpage", updateMarksheetPage);
 router.post("/marksheet/signature", authMiddleware, getMarksheetSignature);
 router.post("/marksheet", authMiddleware, createMarksheet);
 router.put("/marksheet", authMiddleware, createMarksheet);
