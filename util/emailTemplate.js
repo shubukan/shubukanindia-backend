@@ -1,6 +1,43 @@
-
-
 // Email templates
+// Email OTP template
+exports.blogOtpEmailTemplate = (otp) => {
+    return `
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Email Verification</title>
+            <style>
+                body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+                .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+                .header { background-color: #f4f4f4; padding: 20px; text-align: center; }
+                .content { padding: 20px; }
+                .otp { font-size: 22px; font-weight: bold; color: #d9534f; }
+                .footer { background-color: #f4f4f4; padding: 20px; text-align: center; font-size: 12px; }
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="header">
+                    <h1>Shubukan India</h1>
+                </div>
+                <div class="content">
+                    <h2>Email Verification</h2>
+                    <p>Use the following One-Time Password (OTP) to verify your email for commenting or liking on our blog:</p>
+                    <p class="otp">${otp}</p>
+                    <p>This OTP is valid for <strong>5 minutes</strong>. Do not share it with anyone.</p>
+                    <p>Best regards,<br>Shubukan India Team</p>
+                </div>
+                <div class="footer">
+                    <p>© ${new Date().getFullYear()} Shubukan India. All rights reserved.</p>
+                </div>
+            </div>
+        </body>
+        </html>
+    `;
+};
+
 exports.createUserEmailTemplate = (name) => {
     return `
         <!DOCTYPE html>
