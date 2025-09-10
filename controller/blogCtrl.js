@@ -1,4 +1,5 @@
 const Blog = require("../model/blogModel");
+const BlogUser = require("../model/blogUserModel");
 
 // ✅ Create a blog
 exports.createBlog = async (req, res) => {
@@ -15,7 +16,7 @@ exports.getBlogs = async (req, res) => {
   try {
     const { category, tags, status, search, page = 1, limit = 10 } = req.query;
 
-    const query = { };
+    const query = {};
 
     if (category) query["category.primary"] = category;
     if (status) query.status = status;
@@ -123,103 +124,131 @@ exports.permanentDeleteBlog = async (req, res) => {
   }
 };
 
+// ✅ Like a blog
 exports.likeBlog = async (req, res) => {
   try {
-    const { id } = req.params; // blog id
-    const userId = req.user ? req.user._id : null; // if you use authMiddleware
+    const { slug } = req.params;
+    const email = req.email;
 
-    const blog = await Blog.findById(id);
+    // ensure Blog exists
+    const blog = await Blog.findOne({ slug });
     if (!blog) return res.status(404).json({ message: "Blog not found" });
 
-    // Prevent duplicate like
-    if (userId && blog.likes.includes(userId)) {
+    // find/create BlogUser
+    let blogUser = await BlogUser.findOne({ slug });
+    if (!blogUser) blogUser = await BlogUser.create({ slug });
+
+    if (blogUser.likes.includes(email)) {
       return res.status(400).json({ message: "Already liked" });
     }
 
-    if (userId) {
-      blog.likes.push(userId);
-      blog.dislikes = blog.dislikes.filter(
-        (dislikeId) => dislikeId.toString() !== userId.toString()
-      );
-    }
+    blogUser.likes.push(email);
+    blogUser.dislikes = blogUser.dislikes.filter((d) => d !== email);
 
-    blog.likeCount = blog.likes.length;
-    blog.dislikeCount = blog.dislikes.length;
+    blogUser.likeCount = blogUser.likes.length;
+    blogUser.dislikeCount = blogUser.dislikes.length;
 
-    await blog.save();
+    await blogUser.save();
 
-    return res.json({ likeCount: blog.likeCount, dislikeCount: blog.dislikeCount });
+    return res.json({
+      likeCount: blogUser.likeCount,
+      dislikeCount: blogUser.dislikeCount,
+    });
   } catch (error) {
     return res.status(500).json({ message: error.message });
   }
 };
 
+// ✅ Dislike a blog
 exports.dislikeBlog = async (req, res) => {
   try {
-    const { id } = req.params;
-    const userId = req.user ? req.user._id : null;
+    const { slug } = req.params;
+    const email = req.email;
 
-    const blog = await Blog.findById(id);
+    const blog = await Blog.findOne({ slug });
     if (!blog) return res.status(404).json({ message: "Blog not found" });
 
-    if (userId && blog.dislikes.includes(userId)) {
+    let blogUser = await BlogUser.findOne({ slug });
+    if (!blogUser) blogUser = await BlogUser.create({ slug });
+
+    if (blogUser.dislikes.includes(email)) {
       return res.status(400).json({ message: "Already disliked" });
     }
 
-    if (userId) {
-      blog.dislikes.push(userId);
-      blog.likes = blog.likes.filter(
-        (likeId) => likeId.toString() !== userId.toString()
-      );
-    }
+    blogUser.dislikes.push(email);
+    blogUser.likes = blogUser.likes.filter((l) => l !== email);
 
-    blog.likeCount = blog.likes.length;
-    blog.dislikeCount = blog.dislikes.length;
+    blogUser.likeCount = blogUser.likes.length;
+    blogUser.dislikeCount = blogUser.dislikes.length;
 
-    await blog.save();
+    await blogUser.save();
 
-    return res.json({ likeCount: blog.likeCount, dislikeCount: blog.dislikeCount });
+    return res.json({
+      likeCount: blogUser.likeCount,
+      dislikeCount: blogUser.dislikeCount,
+    });
   } catch (error) {
     return res.status(500).json({ message: error.message });
   }
 };
 
+// Comment
 exports.addComment = async (req, res) => {
   try {
-    const { id } = req.params; // blog id
-    const { name, avatar, text } = req.body;
+    const { slug } = req.params;
+    const { text } = req.body;
 
-    if (!text) return res.status(400).json({ message: "Comment text is required" });
+    if (!text)
+      return res.status(400).json({ message: "Comment text is required" });
 
-    const blog = await Blog.findById(id);
-    if (!blog) return res.status(404).json({ message: "Blog not found" });
+    let blogUser = await BlogUser.findOne({ slug });
+    if (!blogUser) blogUser = await BlogUser.create({ slug });
 
-    const comment = { name, avatar, text };
+    const comment = {
+      user: req.email,
+      name: req.email,
+      avatar: null,
+      text,
+    };
 
-    blog.comments.push(comment);
-    await blog.save();
+    blogUser.comments.push(comment);
+    await blogUser.save();
 
-    return res.status(201).json(blog.comments);
+    return res.status(201).json(comment);
   } catch (error) {
     return res.status(500).json({ message: error.message });
   }
 };
 
+// ✅ Reply to a comment
 exports.replyComment = async (req, res) => {
   try {
-    const { id, commentId } = req.params; // blogId + commentId
-    const { name, avatar, text } = req.body;
+    const { slug, commentId } = req.params;
+    const { text } = req.body;
 
-    const blog = await Blog.findById(id);
+    if (!text)
+      return res.status(400).json({ message: "Reply text is required" });
+
+    const blog = await Blog.findOne({ slug });
     if (!blog) return res.status(404).json({ message: "Blog not found" });
 
-    const comment = blog.comments.id(commentId);
+    let blogUser = await BlogUser.findOne({ slug });
+    if (!blogUser) blogUser = await BlogUser.create({ slug });
+
+    const comment = blogUser.comments.id(commentId);
     if (!comment) return res.status(404).json({ message: "Comment not found" });
 
-    comment.replies.push({ name, avatar, text });
+    const reply = {
+      user: req.email,
+      name: req.email,
+      avatar: null,
+      text,
+    };
 
-    await blog.save();
-    return res.status(201).json(comment.replies);
+    comment.replies.push(reply);
+    await blogUser.save();
+
+    return res.status(201).json(reply);
   } catch (error) {
     return res.status(500).json({ message: error.message });
   }
