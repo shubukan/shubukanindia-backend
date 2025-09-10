@@ -105,13 +105,11 @@ router.post("/verify-otp", (req, res) => {
 router.get("/blogs", getBlogs);
 router.get("/blog/:slug", getBlogBySlug);
 
-// Likes/Dislikes
-router.post("/blog/:id/like", emailAuth, likeBlog);
-router.post("/blog/:id/dislike", emailAuth, dislikeBlog);
-
-// Comments
-router.post("/blog/:id/comment", emailAuth, addComment);
-router.post("/blog/:id/comment/:commentId/reply", emailAuth, replyComment);
+// Likes/Dislikes/Comments
+router.post("/blog/:slug/like", emailAuth, likeBlog);
+router.post("/blog/:slug/dislike", emailAuth, dislikeBlog);
+router.post("/blog/:slug/comment", emailAuth, addComment);
+router.post("/blog/:slug/comment/:commentId/reply", emailAuth, replyComment);
 
 // Admin Blog APIs
 router.post("/blog", createBlog);
