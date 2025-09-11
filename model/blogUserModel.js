@@ -5,11 +5,10 @@ const blogUserSchema = new mongoose.Schema(
   {
     slug: { type: String, required: true, index: true }, // relation to Blog.slug
 
-    viewCount: { type: Number, default: 0 },
     likeCount: { type: Number, default: 0 },
     dislikeCount: { type: Number, default: 0 },
 
-    likes: [{ type: String }],    // store email or userId
+    likes: [{ type: String }], // store email or userId
     dislikes: [{ type: String }], // store email or userId
 
     comments: [

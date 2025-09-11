@@ -159,6 +159,20 @@ exports.likeBlog = async (req, res) => {
   }
 };
 
+// ✅ Get likes by slug
+exports.getLikesBySlug = async (req, res) => {
+  try {
+    const { slug } = req.params;
+    const blogUser = await BlogUser.findOne({ slug });
+
+    if (!blogUser) return res.status(404).json({ message: "Blog not found" });
+
+    return res.json({ likes: blogUser.likeCount });
+  } catch (error) {
+    return res.status(500).json({ message: error.message });
+  }
+};
+
 // ✅ Dislike a blog
 exports.dislikeBlog = async (req, res) => {
   try {
@@ -215,6 +229,21 @@ exports.addComment = async (req, res) => {
     await blogUser.save();
 
     return res.status(201).json(comment);
+  } catch (error) {
+    return res.status(500).json({ message: error.message });
+  }
+};
+
+// ✅ Get comments by slug
+exports.getCommentsBySlug = async (req, res) => {
+  try {
+    const { slug } = req.params;
+
+    const blogUser = await BlogUser.findOne({ slug });
+
+    if (!blogUser) return res.status(404).json({ message: "Blog not found" });
+
+    return res.json(blogUser.comments);
   } catch (error) {
     return res.status(500).json({ message: error.message });
   }
