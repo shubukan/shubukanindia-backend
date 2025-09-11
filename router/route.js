@@ -18,6 +18,8 @@ const {
   dislikeBlog,
   addComment,
   replyComment,
+  getCommentsBySlug,
+  getLikesBySlug,
 } = require("../controller/blogCtrl");
 const {
   createGallery,
@@ -105,13 +107,13 @@ router.post("/verify-otp", (req, res) => {
 router.get("/blogs", getBlogs);
 router.get("/blog/:slug", getBlogBySlug);
 
-// Likes/Dislikes
-router.post("/blog/:id/like", emailAuth, likeBlog);
-router.post("/blog/:id/dislike", emailAuth, dislikeBlog);
-
-// Comments
-router.post("/blog/:id/comment", emailAuth, addComment);
-router.post("/blog/:id/comment/:commentId/reply", emailAuth, replyComment);
+// Likes/Dislikes/Comments
+router.post("/blog/like/:slug", emailAuth, likeBlog);
+router.post("/blog/dislike/:slug", emailAuth, dislikeBlog);
+router.post("/blog/comment/:slug", emailAuth, addComment);
+router.post("/blog/comment/reply/:slug/:commentId", emailAuth, replyComment);
+router.get("/blog/like/:slug", getLikesBySlug);
+router.get("/blog/comment/:slug", getCommentsBySlug);
 
 // Admin Blog APIs
 router.post("/blog", createBlog);

@@ -1,3 +1,4 @@
+// model/blogModel.js
 const mongoose = require("mongoose");
 
 const blogSchema = new mongoose.Schema(
@@ -7,7 +8,8 @@ const blogSchema = new mongoose.Schema(
     slug: { type: String, required: true, unique: true },
     summary: { type: String },
     shortNote: { type: String },
-
+    viewCount: { type: Number, default: 0 },
+    
     coverImage: {
       url: { type: String, required: true },
       caption: { type: String },
@@ -40,11 +42,7 @@ const blogSchema = new mongoose.Schema(
 
     publishedDate: { type: Date, default: Date.now },
     modifiedDate: { type: Date },
-    status: {
-      type: String,
-      enum: ["draft", "published"],
-      default: "draft",
-    },
+    status: { type: String, enum: ["draft", "published"], default: "draft" },
     visibility: {
       type: String,
       enum: ["public", "private"],
@@ -79,33 +77,6 @@ const blogSchema = new mongoose.Schema(
     ],
 
     estimatedReadTime: { type: Number, default: 0 },
-    likeCount: { type: Number, default: 0 },
-    dislikeCount: { type: Number, default: 0 },
-
-    likes: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }], // if tracking user IDs
-    dislikes: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
-
-    comments: [
-      {
-        user: {
-          type: mongoose.Schema.Types.ObjectId,
-          ref: "User",
-          required: false, // set true if only registered users can comment
-        },
-        name: { type: String, required: true }, // fallback if no auth system
-        avatar: { type: String },
-        text: { type: String, required: true },
-        createdAt: { type: Date, default: Date.now },
-        replies: [
-          {
-            name: { type: String, required: true },
-            avatar: { type: String },
-            text: { type: String, required: true },
-            createdAt: { type: Date, default: Date.now },
-          },
-        ],
-      },
-    ],
   },
   { timestamps: true }
 );
