@@ -8,7 +8,8 @@ const blogSchema = new mongoose.Schema(
     slug: { type: String, required: true, unique: true },
     summary: { type: String },
     shortNote: { type: String },
-
+    viewCount: { type: Number, default: 0 },
+    
     coverImage: {
       url: { type: String, required: true },
       caption: { type: String },
@@ -42,7 +43,11 @@ const blogSchema = new mongoose.Schema(
     publishedDate: { type: Date, default: Date.now },
     modifiedDate: { type: Date },
     status: { type: String, enum: ["draft", "published"], default: "draft" },
-    visibility: { type: String, enum: ["public", "private"], default: "public" },
+    visibility: {
+      type: String,
+      enum: ["public", "private"],
+      default: "public",
+    },
     layout: { type: String, default: "longform" },
 
     sections: [
