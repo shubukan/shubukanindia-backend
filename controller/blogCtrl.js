@@ -57,24 +57,36 @@ exports.getBlogs = async (req, res) => {
 exports.getBlogBySlug = async (req, res) => {
   try {
     const { slug } = req.params;
+    
+    // Get client IP
     const clientIp =
       req.headers["x-forwarded-for"]?.split(",")[0] || req.socket.remoteAddress;
+
+    // Get user agent (browser/device info)
+    const userAgent = req.headers["user-agent"] || "unknown";
 
     const blog = await Blog.findOne({ slug });
     if (!blog) return res.status(404).json({ message: "Blog not found" });
 
-    // Check if IP already viewed in last 24h
-    const alreadyViewed = await BlogView.findOne({ blogId: blog._id, ip: clientIp });
+    // Check if this IP + userAgent combo already viewed in last 24h
+    const alreadyViewed = await BlogView.findOne({
+      blogId: blog._id,
+      ip: clientIp,
+      userAgent,
+    });
 
     if (!alreadyViewed) {
+      // First time in last 24h → count the view
       blog.viewCount += 1;
       await blog.save();
 
-      await BlogView.create({ blogId: blog._id, ip: clientIp });
+      // Store view log
+      await BlogView.create({ blogId: blog._id, ip: clientIp, userAgent });
     }
 
     return res.json(blog);
   } catch (error) {
+    console.error("Error fetching blog:", error);
     return res.status(500).json({ message: error.message });
   }
 };
