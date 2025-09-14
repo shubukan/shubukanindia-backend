@@ -21,6 +21,7 @@ const {
   getCommentsBySlug,
   getLikesBySlug,
   incrementBlogView,
+  getBlogSlugs,
 } = require("../controller/blogCtrl");
 const {
   createGallery,
@@ -106,6 +107,7 @@ router.post("/verify-otp", (req, res) => {
 
 // Public Blog APIs
 router.get("/blogs", getBlogs);
+router.get("/slugs", getBlogSlugs);
 router.get("/blog/:slug", getBlogBySlug);
 router.post("/blog/:slug/view", incrementBlogView);
 // Likes/Dislikes/Comments
