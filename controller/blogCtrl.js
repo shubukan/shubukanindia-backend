@@ -40,6 +40,21 @@ exports.createBlog = async (req, res) => {
   }
 };
 
+// ✅ Get all blog slugs with minimal SEO data
+exports.getBlogSlugs = async (req, res) => {
+  try {
+    const blogs = await Blog.find(
+      { status: "published", visibility: "public" }, // Only public published blogs
+      "title slug thumbnailImage summary tags" // Only select required fields
+    ).sort({ publishedDate: -1 });
+
+    return res.json({ blogs });
+  } catch (error) {
+    return res.status(500).json({ message: error.message });
+  }
+};
+
+
 // ✅ Get all blogs (with filters, pagination, sorting)
 exports.getBlogs = async (req, res) => {
   try {
