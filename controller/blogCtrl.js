@@ -1,6 +1,10 @@
 const Blog = require("../model/blogModel");
 const BlogUser = require("../model/blogUserModel");
 const BlogView = require("../model/blogViewModel");
+const crypto = require("crypto");
+const { sendEmail } = require("../util/sendEmail");
+const { blogOtpEmailTemplate } = require("../util/emailTemplate");
+const { addVerifiedUser } = require("../middleware/emailAuth");
 
 exports.incrementBlogView = async (req, res) => {
   try {
@@ -30,7 +34,7 @@ exports.incrementBlogView = async (req, res) => {
   }
 };
 
-// ✅ Create a blog
+// Create a blog
 exports.createBlog = async (req, res) => {
   try {
     const blog = await Blog.create(req.body);
@@ -40,7 +44,7 @@ exports.createBlog = async (req, res) => {
   }
 };
 
-// ✅ Get all blog slugs with minimal SEO data
+// Get all blog slugs with minimal SEO data
 exports.getBlogSlugs = async (req, res) => {
   try {
     const blogs = await Blog.find(
@@ -54,8 +58,7 @@ exports.getBlogSlugs = async (req, res) => {
   }
 };
 
-
-// ✅ Get all blogs (with filters, pagination, sorting)
+// Get all blogs (with filters, pagination, sorting)
 exports.getBlogs = async (req, res) => {
   try {
     const { category, tags, status, search, page = 1, limit = 10 } = req.query;
@@ -96,7 +99,7 @@ exports.getBlogs = async (req, res) => {
   }
 };
 
-// ✅ Get single blog by slug
+// Get single blog by slug
 exports.getBlogBySlug = async (req, res) => {
   try {
     const { slug } = req.params;
@@ -110,7 +113,7 @@ exports.getBlogBySlug = async (req, res) => {
   }
 };
 
-// ✅ Update blog
+// Update blog
 exports.updateBlog = async (req, res) => {
   try {
     const { id } = req.params;
@@ -128,7 +131,7 @@ exports.updateBlog = async (req, res) => {
   }
 };
 
-// ✅ Soft delete blog
+// Soft delete blog
 exports.softDeleteBlog = async (req, res) => {
   try {
     const { id } = req.params;
@@ -148,7 +151,7 @@ exports.softDeleteBlog = async (req, res) => {
   }
 };
 
-// ✅ Permanent delete blog
+// Permanent delete blog
 exports.permanentDeleteBlog = async (req, res) => {
   try {
     const { id } = req.params;
@@ -164,7 +167,46 @@ exports.permanentDeleteBlog = async (req, res) => {
   }
 };
 
-// ✅ Like a blog
+// ------------------------------------------
+// Temporary in-memory store (better: Redis or DB)
+const otpStore = new Map();
+
+// Send OTP
+exports.sendOTP = async (req, res) => {
+  const { email } = req.body;
+  if (!email) return res.status(400).json({ message: "Email required" });
+
+  const otp = Math.floor(100000 + Math.random() * 900000).toString();
+  otpStore.set(email, { otp, expiresAt: Date.now() + 5 * 60 * 1000 });
+
+  const html = blogOtpEmailTemplate(otp);
+  await sendEmail(email, "Verify your email - Shubukan India", html);
+
+  res.json({ message: "OTP sent to email" });
+};
+
+// Verify OTP
+exports.verifyOTP = (req, res) => {
+  const { email, otp } = req.body;
+  const data = otpStore.get(email);
+
+  if (!data) return res.status(400).json({ message: "No OTP sent" });
+  if (Date.now() > data.expiresAt)
+    return res.status(400).json({ message: "OTP expired" });
+  if (data.otp !== otp) return res.status(400).json({ message: "Invalid OTP" });
+
+  otpStore.delete(email);
+
+  // Generate a simple session token (or JWT if you want)
+  const token = crypto.randomBytes(16).toString("hex");
+
+  // ✅ Save session in verified users list
+  addVerifiedUser(email, token);
+
+  res.json({ message: "Email verified", token });
+};
+
+// Like a blog
 exports.likeBlog = async (req, res) => {
   try {
     const { slug } = req.params;
@@ -199,7 +241,7 @@ exports.likeBlog = async (req, res) => {
   }
 };
 
-// ✅ Get likes by slug
+// Get likes by slug
 exports.getLikesBySlug = async (req, res) => {
   try {
     const { slug } = req.params;
@@ -213,7 +255,7 @@ exports.getLikesBySlug = async (req, res) => {
   }
 };
 
-// ✅ Dislike a blog
+// Dislike a blog
 exports.dislikeBlog = async (req, res) => {
   try {
     const { slug } = req.params;
@@ -274,7 +316,7 @@ exports.addComment = async (req, res) => {
   }
 };
 
-// ✅ Get comments by slug
+// Get comments by slug
 exports.getCommentsBySlug = async (req, res) => {
   try {
     const { slug } = req.params;
@@ -289,7 +331,7 @@ exports.getCommentsBySlug = async (req, res) => {
   }
 };
 
-// ✅ Reply to a comment
+// Reply to a comment
 exports.replyComment = async (req, res) => {
   try {
     const { slug, commentId } = req.params;

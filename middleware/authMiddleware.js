@@ -16,8 +16,8 @@ exports.authMiddleware = async (req, res, next) => {
     const token = authHeader.split(" ")[1]; // extract token after "Bearer"
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const admin = await AdminModel.findOne({ id: decoded.id });
 
+    const admin = await AdminModel.findOne({ id: decoded.id });
     if (!admin) {
       return res.status(401).json({
         success: false,
@@ -34,7 +34,7 @@ exports.authMiddleware = async (req, res, next) => {
   } catch (error) {
     return res.status(401).json({
       success: false,
-      error: "Invalid token",
+      error: "Invalid or expired token",
     });
   }
 };
