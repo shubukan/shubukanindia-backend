@@ -1,0 +1,15 @@
+const mongoose = require("mongoose");
+
+const instructorSchema = new mongoose.Schema(
+  {
+    name: { type: String, required: true, unique: true },
+    email: { type: String, required: true, unique: true },
+    mobile: { type: String },
+    instructorId: { type: String, required: true, unique: true }, // 10-digit alphanumeric
+    isVerified: { type: Boolean, default: false },
+    isDeleted: { type: Boolean, default: false },
+  },
+  { timestamps: true }
+);
+
+module.exports = mongoose.model("Instructor", instructorSchema);
