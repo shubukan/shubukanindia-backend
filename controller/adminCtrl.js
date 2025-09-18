@@ -13,7 +13,9 @@ exports.createAdmin = async (req, res) => {
 
     const existing = await AdminModel.findOne({ id });
     if (existing) {
-      return res.status(409).json({ success: false, error: "Admin already exists" });
+      return res
+        .status(409)
+        .json({ success: false, error: "Admin already exists" });
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
@@ -85,7 +87,9 @@ exports.adminLogin = async (req, res) => {
 exports.refreshTokenController = async (req, res) => {
   const { refreshToken } = req.body;
   if (!refreshToken) {
-    return res.status(401).json({ success: false, error: "Missing refresh token" });
+    return res
+      .status(401)
+      .json({ success: false, error: "Missing refresh token" });
   }
 
   try {
@@ -93,7 +97,9 @@ exports.refreshTokenController = async (req, res) => {
     const admin = await AdminModel.findOne({ id: decoded.id, refreshToken });
 
     if (!admin) {
-      return res.status(403).json({ success: false, error: "Invalid refresh token" });
+      return res
+        .status(403)
+        .json({ success: false, error: "Invalid refresh token" });
     }
 
     const newAccessToken = jwt.sign({ id: admin.id }, process.env.JWT_SECRET, {
@@ -102,7 +108,9 @@ exports.refreshTokenController = async (req, res) => {
 
     return res.json({ success: true, token: newAccessToken });
   } catch (err) {
-    return res.status(403).json({ success: false, error: "Invalid refresh token" });
+    return res
+      .status(403)
+      .json({ success: false, error: "Invalid refresh token" });
   }
 };
 
@@ -112,11 +120,16 @@ exports.adminLogout = async (req, res) => {
     await req.admin.save();
     return res.json({ success: true, message: "Logged out successfully" });
   } catch (error) {
-    return res.status(500).json({ success: false, error: "Internal server error" });
+    return res
+      .status(500)
+      .json({ success: false, error: "Internal server error" });
   }
 };
 
 exports.adminValidate = async (req, res) => {
-  return res.json({ success: true, admin: { id: req.admin.id, lastActive: req.admin.lastActive } });
+  return res.json({
+    success: true,
+    admin: { id: req.admin.id, lastActive: req.admin.lastActive },
+  });
 };
 // end of adminCtrl.js

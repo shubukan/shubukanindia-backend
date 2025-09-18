@@ -5,12 +5,19 @@ const jwt = require("jsonwebtoken");
 const { sendEmail } = require("../util/sendEmail");
 const { blogOtpEmailTemplate } = require("../util/emailTemplate");
 
+// Admin Controllers --------------------------------
 // Temporary in-memory OTP store
 const otpStore = new Map();
 
-// Generate random 10-digit alphanumeric Instructor ID
+// Generate random 10-char alphanumeric Instructor ID
 const generateInstructorId = () => {
-  return crypto.randomBytes(5).toString("hex").toUpperCase(); // 10 chars
+  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+  let id = "";
+  for (let i = 0; i < 10; i++) {
+    const randomIndex = crypto.randomInt(0, chars.length);
+    id += chars[randomIndex];
+  }
+  return id;
 };
 
 // Admin creates new Instructor ID
@@ -19,7 +26,19 @@ exports.generateInstructorId = async (req, res) => {
     const { name } = req.body;
     if (!name) return res.status(400).json({ message: "Name required" });
 
-    const instructorId = generateInstructorId();
+    const existing = await InstructorIDModel.exists({ name });
+    if (existing)
+      return res.status(400).json({ message: "Instructor with same Name already registered" });
+
+    let instructorId;
+    let exists = true;
+
+    // keep generating until a unique one is found
+    while (exists) {
+      instructorId = generateInstructorId();
+      exists = await InstructorIDModel.exists({ instructorId });
+    }
+
     const instructor = await InstructorIDModel.create({
       name,
       instructorId,
@@ -44,15 +63,15 @@ exports.getAllInstructors = async (req, res) => {
 // Admin deletes instructor
 exports.softDeleteInstructor = async (req, res) => {
   try {
-    const { instructorid } = req.params;
+    const { iid } = req.params;
     const instructorID = await InstructorIDModel.findOneAndUpdate(
-      { instructorId: instructorid },
+      { instructorId: iid },
       { isDeleted: true },
       { new: true }
     );
 
     const instructor = await InstructorModel.findOneAndUpdate(
-      { instructorId: instructorid },
+      { instructorId: iid },
       { isDeleted: true },
       { new: true }
     );
@@ -68,12 +87,12 @@ exports.softDeleteInstructor = async (req, res) => {
 // Admin deletes instructor
 exports.permaDeleteInstructor = async (req, res) => {
   try {
-    const { instructorid } = req.params;
+    const { iid } = req.params;
     const deletedID = await InstructorIDModel.findOneAndDelete({
-      instructorId: instructorid,
+      instructorId: iid,
     });
     const deleted = await InstructorModel.findOneAndDelete({
-      instructorId: instructorid,
+      instructorId: iid,
     });
 
     if (!deletedID && !deleted)
