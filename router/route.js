@@ -1,12 +1,6 @@
 const express = require("express");
 const router = express.Router();
-const crypto = require("crypto");
 
-const { authMiddleware } = require("../middleware/authMiddleware");
-const { emailAuth } = require("../middleware/emailAuth");
-const { sendEmail } = require("../util/sendEmail");
-const { blogOtpEmailTemplate } = require("../util/emailTemplate");
-const { addVerifiedUser } = require("../middleware/emailAuth");
 const {
   createBlog,
   getBlogs,
@@ -22,6 +16,8 @@ const {
   getLikesBySlug,
   incrementBlogView,
   getBlogSlugs,
+  verifyOTP,
+  sendOTP,
 } = require("../controller/blogCtrl");
 const {
   createGallery,
@@ -32,6 +28,16 @@ const {
   getCloudinarySignature,
   createGalleryWithUrl,
 } = require("../controller/galleryCtrl");
+const {
+  generateInstructorId,
+  sendInstructorOtp,
+  verifyInstructorOtp,
+  signupInstructor,
+  loginInstructor,
+  softDeleteInstructor,
+  permaDeleteInstructor,
+  getAllInstructors,
+} = require("../controller/instructorCtrl");
 const {
   createDojo,
   fetchAllDojo,
@@ -55,55 +61,18 @@ const {
   createAdmin,
   adminLogin,
   adminValidate,
+  refreshTokenController,
+  adminLogout,
 } = require("../controller/adminCtrl");
-
-// Debug API
-router.get("/debug", (_, res) => {
-  let data = "😍 V3";
-  return res.send({ data: data });
-});
+const { authMiddleware } = require("../middleware/authMiddleware");
+const { emailAuth } = require("../middleware/emailAuth");
 
 // Admin APIs ---
+router.post("/admin/create", createAdmin); // one-time use
 router.post("/admin/auth", adminLogin);
+router.post("/admin/refresh", refreshTokenController);
+router.post("/admin/logout", authMiddleware, adminLogout);
 router.post("/admin/validate", authMiddleware, adminValidate);
-
-// Temporary in-memory store (better: Redis or DB)
-const otpStore = new Map();
-
-// Send OTP
-router.post("/send-otp", async (req, res) => {
-  const { email } = req.body;
-  if (!email) return res.status(400).json({ message: "Email required" });
-
-  const otp = Math.floor(100000 + Math.random() * 900000).toString();
-  otpStore.set(email, { otp, expiresAt: Date.now() + 5 * 60 * 1000 });
-
-  const html = blogOtpEmailTemplate(otp);
-  await sendEmail(email, "Verify your email - Shubukan India", html);
-
-  res.json({ message: "OTP sent to email" });
-});
-
-// Verify OTP
-router.post("/verify-otp", (req, res) => {
-  const { email, otp } = req.body;
-  const data = otpStore.get(email);
-
-  if (!data) return res.status(400).json({ message: "No OTP sent" });
-  if (Date.now() > data.expiresAt)
-    return res.status(400).json({ message: "OTP expired" });
-  if (data.otp !== otp) return res.status(400).json({ message: "Invalid OTP" });
-
-  otpStore.delete(email);
-
-  // Generate a simple session token (or JWT if you want)
-  const token = crypto.randomBytes(16).toString("hex");
-
-  // ✅ Save session in verified users list
-  addVerifiedUser(email, token);
-
-  res.json({ message: "Email verified", token });
-});
 
 // Public Blog APIs
 router.get("/blogs", getBlogs);
@@ -111,6 +80,8 @@ router.get("/slugs", getBlogSlugs);
 router.get("/blog/:slug", getBlogBySlug);
 router.post("/blog/:slug/view", incrementBlogView);
 // Likes/Dislikes/Comments
+router.post("/send-otp", sendOTP);
+router.post("/verify-otp", verifyOTP);
 router.post("/blog/like/:slug", emailAuth, likeBlog);
 router.post("/blog/dislike/:slug", emailAuth, dislikeBlog);
 router.post("/blog/comment/:slug", emailAuth, addComment);
@@ -131,6 +102,25 @@ router.get("/gallery", getGallery);
 router.put("/gallery/:id", authMiddleware, updateGallery);
 router.delete("/gallery/soft/:id", authMiddleware, softDeleteGallery);
 router.delete("/gallery/perma/:id", authMiddleware, permanentDeleteGallery);
+
+// Instructor APIs ---
+router.post("/instructor/generate", authMiddleware, generateInstructorId);
+router.get("/instructors", getAllInstructors);
+router.delete(
+  "/instructor/soft/:instructorid",
+  authMiddleware,
+  softDeleteInstructor
+);
+router.delete(
+  "/instructor/perma/:instructorid",
+  authMiddleware,
+  permaDeleteInstructor
+);
+
+router.post("/instructor/signup", signupInstructor);
+router.post("/instructor/login", loginInstructor);
+router.post("/instructor/send-otp", sendInstructorOtp);
+router.post("/instructor/verify-otp", verifyInstructorOtp);
 
 // Dojo APIs ---
 router.post("/dojo", authMiddleware, createDojo);
@@ -153,5 +143,11 @@ router
   .get(getRegistration)
   .put(authMiddleware, updateRegistration)
   .delete(authMiddleware, deleteRegistration);
+
+// Debug API
+router.get("/debug", (_, res) => {
+  let data = "😍 V3";
+  return res.send({ data: data });
+});
 
 module.exports = router;
