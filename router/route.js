@@ -69,7 +69,7 @@ const { emailAuth } = require("../middleware/emailAuth");
 
 // Admin APIs ---
 router.post("/admin/create", createAdmin); // one-time use
-router.post("/admin/auth", adminLogin);
+router.post("/admin/login", adminLogin);
 router.post("/admin/refresh", refreshTokenController);
 router.post("/admin/logout", authMiddleware, adminLogout);
 router.post("/admin/validate", authMiddleware, adminValidate);
@@ -90,7 +90,7 @@ router.get("/blog/like/:slug", getLikesBySlug);
 router.get("/blog/comment/:slug", getCommentsBySlug);
 
 // Admin Blog APIs
-router.post("/blog", createBlog);
+router.post("/blog", authMiddleware, createBlog);
 router.put("/blog/:id", authMiddleware, updateBlog);
 router.delete("/blog/soft/:id", authMiddleware, softDeleteBlog);
 router.delete("/blog/perma/:id", authMiddleware, permanentDeleteBlog);
@@ -104,18 +104,10 @@ router.delete("/gallery/soft/:id", authMiddleware, softDeleteGallery);
 router.delete("/gallery/perma/:id", authMiddleware, permanentDeleteGallery);
 
 // Instructor APIs ---
-router.post("/instructor/generate", authMiddleware, generateInstructorId);
 router.get("/instructors", getAllInstructors);
-router.delete(
-  "/instructor/soft/:instructorid",
-  authMiddleware,
-  softDeleteInstructor
-);
-router.delete(
-  "/instructor/perma/:instructorid",
-  authMiddleware,
-  permaDeleteInstructor
-);
+router.post("/instructor/generate", authMiddleware, generateInstructorId);
+router.delete("/instructor/soft/:iid", authMiddleware, softDeleteInstructor);
+router.delete("/instructor/perma/:iid", authMiddleware, permaDeleteInstructor);
 
 router.post("/instructor/signup", signupInstructor);
 router.post("/instructor/login", loginInstructor);
