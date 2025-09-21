@@ -1,3 +1,4 @@
+// controller/instructorCtrl.js
 const InstructorModel = require("../model/instructorModel");
 const InstructorIDModel = require("../model/instructorIDModel");
 const crypto = require("crypto");
