@@ -1,4 +1,31 @@
-// Email templates
+// util/emailTemplate.js
+exports.instructorOtpEmailTemplate = (otp) => {
+  return `
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8">
+      <title>Instructor Email Verification</title>
+      <style>
+        body { font-family: Arial, sans-serif; color: #333; }
+        .container { max-width: 600px; margin: auto; padding: 20px; }
+        .otp { font-size: 22px; font-weight: bold; color: #007bff; }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <h2>Email Verification</h2>
+        <p>Dear Instructor,</p>
+        <p>Your OTP code is:</p>
+        <p class="otp">${otp}</p>
+        <p>This code is valid for <strong>5 minutes</strong>. Please do not share it with anyone.</p>
+        <p>Regards,<br>Shubukan India</p>
+      </div>
+    </body>
+    </html>
+  `;
+};
+
 // Email OTP template
 exports.blogOtpEmailTemplate = (otp) => {
     return `
