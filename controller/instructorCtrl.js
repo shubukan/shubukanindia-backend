@@ -3,14 +3,14 @@ const InstructorIDModel = require("../model/instructorIDModel");
 const crypto = require("crypto");
 const jwt = require("jsonwebtoken");
 const { sendEmail } = require("../util/sendEmail");
-const { blogOtpEmailTemplate } = require("../util/emailTemplate");
+const { instructorOtpEmailTemplate } = require("../util/emailTemplate");
 
 // Admin Controllers --------------------------------
 // Temporary in-memory OTP store
 const otpStore = new Map();
 
 // Generate random 10-char alphanumeric Instructor ID
-const generateInstructorId = () => {
+const generateId = () => {
   const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
   let id = "";
   for (let i = 0; i < 10; i++) {
@@ -23,24 +23,23 @@ const generateInstructorId = () => {
 // Admin creates new Instructor ID
 exports.generateInstructorId = async (req, res) => {
   try {
-    const { name } = req.body;
+    const { name, location } = req.body;
     if (!name) return res.status(400).json({ message: "Name required" });
-
-    const existing = await InstructorIDModel.exists({ name });
-    if (existing)
-      return res.status(400).json({ message: "Instructor with same Name already registered" });
+    if (!location)
+      return res.status(400).json({ message: "Location required" });
 
     let instructorId;
     let exists = true;
 
     // keep generating until a unique one is found
     while (exists) {
-      instructorId = generateInstructorId();
+      instructorId = generateId();
       exists = await InstructorIDModel.exists({ instructorId });
     }
 
     const instructor = await InstructorIDModel.create({
       name,
+      location,
       instructorId,
     });
 
@@ -105,19 +104,44 @@ exports.permaDeleteInstructor = async (req, res) => {
 
 // -----------------------------------------------------------------
 
-// Send OTP (Signup/Login)
-exports.sendInstructorOtp = async (req, res) => {
+// ReSend OTP (Signup/Login)
+exports.resendInstructorOtp = async (req, res) => {
   try {
-    const { email } = req.body;
-    if (!email) return res.status(400).json({ message: "Email required" });
+    const { email, type } = req.body; // type = "signup" | "login"
+    if (!email || !type)
+      return res.status(400).json({ message: "Email and type required" });
 
+    const instructor = await InstructorModel.findOne({
+      email,
+      isDeleted: false,
+    });
+    if (!instructor)
+      return res.status(404).json({ message: "Instructor not found" });
+
+    if (type === "signup" && instructor.isVerified) {
+      return res
+        .status(400)
+        .json({ message: "Already verified, please login instead" });
+    }
+
+    if (type === "login" && !instructor.isVerified) {
+      return res
+        .status(400)
+        .json({ message: "Not verified yet, please signup first" });
+    }
+
+    // generate OTP
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
     otpStore.set(email, { otp, expiresAt: Date.now() + 5 * 60 * 1000 });
 
-    const html = blogOtpEmailTemplate(otp);
-    await sendEmail(email, "Verify your email - Shubukan India Exam", html);
+    const { instructorOtpEmailTemplate } = require("../util/emailTemplate");
+    await sendEmail(
+      email,
+      "OTP - Shubukan India Exam",
+      instructorOtpEmailTemplate(otp)
+    );
 
-    return res.json({ message: "OTP sent to email" });
+    return res.json({ message: "OTP resent to email" });
   } catch (error) {
     return res.status(500).json({ message: error.message });
   }
@@ -135,17 +159,27 @@ exports.verifyInstructorOtp = async (req, res) => {
     if (data.otp !== otp)
       return res.status(400).json({ message: "Invalid OTP" });
 
+    const instructor = await InstructorModel.findOne({
+      email,
+      isDeleted: false,
+    });
+    if (!instructor)
+      return res.status(404).json({ message: "Instructor not found" });
+
     otpStore.delete(email);
 
-    // Issue JWT token
-    const token = jwt.sign({ email }, process.env.JWT_SECRET, {
-      expiresIn: "7d",
-    });
+    instructor.isVerified = true;
+    await instructor.save();
 
-    // Mark instructor verified
-    await InstructorModel.findOneAndUpdate({ email }, { isVerified: true });
+    const token = jwt.sign(
+      { id: instructor._id, email },
+      process.env.JWT_SECRET,
+      {
+        expiresIn: "7d",
+      }
+    );
 
-    return res.json({ message: "Email verified", token });
+    return res.json({ message: "OTP verified", token });
   } catch (error) {
     return res.status(500).json({ message: error.message });
   }
@@ -165,13 +199,13 @@ exports.signupInstructor = async (req, res) => {
       isDeleted: false,
     });
     if (!existingID)
-      return res.status(400).json({ message: "Contact your admin to get id" });
+      return res.status(400).json({ message: "Contact admin to get ID" });
 
-    const used = await InstructorModel.findOne({ instructorId });
-    if (used)
-      return res.status(400).json({ message: "Instructor ID already used" });
+    if (existingID.claimed) {
+      return res.status(400).json({ message: "Instructor ID already claimed" });
+    }
 
-    await InstructorModel.create({
+    const instructor = await InstructorModel.create({
       name,
       email,
       mobile,
@@ -179,9 +213,24 @@ exports.signupInstructor = async (req, res) => {
       isVerified: false,
     });
 
+    // Mark the ID as claimed
+    existingID.claimed = true;
+    await existingID.save();
+
+    // auto trigger OTP
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    otpStore.set(email, { otp, expiresAt: Date.now() + 5 * 60 * 1000 });
+
+    const { instructorOtpEmailTemplate } = require("../util/emailTemplate");
+    await sendEmail(
+      email,
+      "Verify your email - Shubukan India Exam",
+      instructorOtpEmailTemplate(otp)
+    );
+
     return res
       .status(201)
-      .json({ message: "Instructor registered. Verify OTP." });
+      .json({ message: "Instructor registered. OTP sent to email." });
   } catch (error) {
     return res.status(500).json({ message: error.message });
   }
@@ -190,14 +239,76 @@ exports.signupInstructor = async (req, res) => {
 // Login
 exports.loginInstructor = async (req, res) => {
   try {
-    const { name, email } = req.body;
-    const instructor = await InstructorModel.findOne({ email, name });
+    const { email } = req.body;
+    const instructor = await InstructorModel.findOne({
+      email,
+      isDeleted: false,
+    });
 
     if (!instructor)
       return res.status(404).json({ message: "Instructor not found" });
 
-    // Require OTP verification
-    return res.json({ message: "OTP required for login" });
+    if (!instructor.isVerified)
+      return res
+        .status(400)
+        .json({ message: "Instructor not verified. Please sign up first." });
+
+    // generate OTP
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    otpStore.set(email, { otp, expiresAt: Date.now() + 5 * 60 * 1000 });
+
+    const { instructorOtpEmailTemplate } = require("../util/emailTemplate");
+    await sendEmail(
+      email,
+      "Login OTP - Shubukan India Exam",
+      instructorOtpEmailTemplate(otp)
+    );
+
+    return res.json({ message: "OTP sent to email for login" });
+  } catch (error) {
+    return res.status(500).json({ message: error.message });
+  }
+};
+
+// Get Profile
+exports.getInstructorProfile = async (req, res) => {
+  try {
+    const instructor = await InstructorModel.findById(req.instructor.id).select(
+      "-__v -createdAt -updatedAt"
+    );
+    if (!instructor)
+      return res.status(404).json({ message: "Instructor not found" });
+    return res.json(instructor);
+  } catch (error) {
+    return res.status(500).json({ message: error.message });
+  }
+};
+
+// Update Profile (cannot update instructorId)
+exports.updateInstructorProfile = async (req, res) => {
+  try {
+    const { name, email, mobile } = req.body;
+
+    const updated = await InstructorModel.findByIdAndUpdate(
+      req.instructor.id,
+      { name, email, mobile },
+      { new: true, runValidators: true }
+    ).select("-__v -createdAt -updatedAt");
+
+    if (!updated)
+      return res.status(404).json({ message: "Instructor not found" });
+    return res.json(updated);
+  } catch (error) {
+    return res.status(500).json({ message: error.message });
+  }
+};
+
+// Logout (client removes token, server optional blacklist)
+exports.logoutInstructor = async (req, res) => {
+  try {
+    return res.json({
+      message: "Logged out successfully. Please clear your token on client.",
+    });
   } catch (error) {
     return res.status(500).json({ message: error.message });
   }
