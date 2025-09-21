@@ -2,10 +2,13 @@ const mongoose = require("mongoose");
 
 const instructorIDSchema = new mongoose.Schema(
   {
-    name: { type: String, required: true, unique: true },
-    email: { type: String },
-    mobile: { type: String },
+    name: { type: String, required: true },
+    email: { type: String }, // get at signup
+    mobile: { type: String }, // get at signup
+    identity: { type: String, required: true },
     instructorId: { type: String, required: true, unique: true },
+    claimed: { type: Boolean, default: false },
+    isVerified: { type: Boolean, default: false },
     isDeleted: { type: Boolean, default: false },
   },
   { timestamps: true }

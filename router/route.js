@@ -30,13 +30,16 @@ const {
 } = require("../controller/galleryCtrl");
 const {
   generateInstructorId,
-  sendInstructorOtp,
   verifyInstructorOtp,
   signupInstructor,
   loginInstructor,
   softDeleteInstructor,
   permaDeleteInstructor,
   getAllInstructors,
+  getInstructorProfile,
+  updateInstructorProfile,
+  logoutInstructor,
+  resendInstructorOtp,
 } = require("../controller/instructorCtrl");
 const {
   createDojo,
@@ -66,13 +69,14 @@ const {
 } = require("../controller/adminCtrl");
 const { authMiddleware } = require("../middleware/authMiddleware");
 const { emailAuth } = require("../middleware/emailAuth");
+const { instructorAuth } = require("../middleware/instructorAuth");
 
 // Admin APIs ---
-router.post("/admin/create", createAdmin); // one-time use
 router.post("/admin/login", adminLogin);
 router.post("/admin/refresh", refreshTokenController);
 router.post("/admin/logout", authMiddleware, adminLogout);
 router.post("/admin/validate", authMiddleware, adminValidate);
+// router.post("/admin/create", createAdmin); // one-time use
 
 // Public Blog APIs
 router.get("/blogs", getBlogs);
@@ -82,12 +86,12 @@ router.post("/blog/:slug/view", incrementBlogView);
 // Likes/Dislikes/Comments
 router.post("/send-otp", sendOTP);
 router.post("/verify-otp", verifyOTP);
+router.get("/blog/like/:slug", getLikesBySlug);
 router.post("/blog/like/:slug", emailAuth, likeBlog);
 router.post("/blog/dislike/:slug", emailAuth, dislikeBlog);
+router.get("/blog/comment/:slug", getCommentsBySlug);
 router.post("/blog/comment/:slug", emailAuth, addComment);
 router.post("/blog/comment/reply/:slug/:commentId", emailAuth, replyComment);
-router.get("/blog/like/:slug", getLikesBySlug);
-router.get("/blog/comment/:slug", getCommentsBySlug);
 
 // Admin Blog APIs
 router.post("/blog", authMiddleware, createBlog);
@@ -98,8 +102,8 @@ router.delete("/blog/perma/:id", authMiddleware, permanentDeleteBlog);
 // Gallery APIs ---
 router.post("/gallery/signature", authMiddleware, getCloudinarySignature);
 router.post("/gallery", authMiddleware, createGalleryWithUrl);
-router.get("/gallery", getGallery);
 router.put("/gallery/:id", authMiddleware, updateGallery);
+router.get("/gallery", getGallery);
 router.delete("/gallery/soft/:id", authMiddleware, softDeleteGallery);
 router.delete("/gallery/perma/:id", authMiddleware, permanentDeleteGallery);
 
@@ -109,14 +113,17 @@ router.post("/instructor/generate", authMiddleware, generateInstructorId);
 router.delete("/instructor/soft/:iid", authMiddleware, softDeleteInstructor);
 router.delete("/instructor/perma/:iid", authMiddleware, permaDeleteInstructor);
 
-router.post("/instructor/signup", signupInstructor);
 router.post("/instructor/login", loginInstructor);
-router.post("/instructor/send-otp", sendInstructorOtp);
+router.post("/instructor/signup", signupInstructor);
+router.post("/instructor/resend-otp", resendInstructorOtp);
 router.post("/instructor/verify-otp", verifyInstructorOtp);
+router.get("/instructor/profile", instructorAuth, getInstructorProfile);
+router.put("/instructor/profile", instructorAuth, updateInstructorProfile);
+router.post("/instructor/logout", instructorAuth, logoutInstructor);
 
 // Dojo APIs ---
-router.post("/dojo", authMiddleware, createDojo);
 router.get("/dojo", fetchAllDojo);
+router.post("/dojo", authMiddleware, createDojo);
 router.put("/dojo/:id", authMiddleware, updateDojo);
 router.delete("/dojo/:id", authMiddleware, deleteDojo);
 
