@@ -1,4 +1,32 @@
 // util/emailTemplate.js
+
+exports.studentOtpEmailTemplate = (otp) => {
+  return `
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8">
+      <title>Student Email Verification</title>
+      <style>
+        body { font-family: Arial, sans-serif; color: #333; }
+        .container { max-width: 600px; margin: auto; padding: 20px; }
+        .otp { font-size: 22px; font-weight: bold; color: #28a745; }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <h2>Email Verification</h2>
+        <p>Dear Student,</p>
+        <p>Your OTP code is:</p>
+        <p class="otp">${otp}</p>
+        <p>This code is valid for <strong>5 minutes</strong>. Please do not share it with anyone.</p>
+        <p>Regards,<br>Shubukan India</p>
+      </div>
+    </body>
+    </html>
+  `;
+};
+
 exports.instructorOtpEmailTemplate = (otp) => {
   return `
     <!DOCTYPE html>
