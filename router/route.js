@@ -1,3 +1,4 @@
+// router/route.js
 const express = require("express");
 const router = express.Router();
 
@@ -42,6 +43,20 @@ const {
   resendInstructorOtp,
 } = require("../controller/instructorCtrl");
 const {
+  signupStudent,
+  loginStudent,
+  resendStudentOtp,
+  verifyStudentOtp,
+  getStudentProfile,
+  updateStudentProfile,
+  deleteStudent,          // Admin only
+  getAllStudents,         // Admin only
+  getStudentsByInstructor,// Admin only
+  getOutsideStudents,     // Admin only
+  getMyStudents,          // Instructor
+  deleteMyStudent,        // Instructor
+} = require("../controller/studentCtrl");
+const {
   createDojo,
   fetchAllDojo,
   updateDojo,
@@ -70,6 +85,7 @@ const {
 const { authMiddleware } = require("../middleware/authMiddleware");
 const { emailAuth } = require("../middleware/emailAuth");
 const { instructorAuth } = require("../middleware/instructorAuth");
+const { studentAuth } = require("../middleware/studentAuth");
 
 // Admin APIs ---
 router.post("/admin/login", adminLogin);
@@ -77,6 +93,38 @@ router.post("/admin/refresh", refreshTokenController);
 router.post("/admin/logout", authMiddleware, adminLogout);
 router.post("/admin/validate", authMiddleware, adminValidate);
 // router.post("/admin/create", createAdmin); // one-time use
+
+// Instructor APIs ---
+router.get("/instructors", getAllInstructors);
+router.post("/instructor/generate", authMiddleware, generateInstructorId);
+router.delete("/instructor/soft/:iid", authMiddleware, softDeleteInstructor);
+router.delete("/instructor/perma/:iid", authMiddleware, permaDeleteInstructor);
+
+router.post("/instructor/login", loginInstructor);
+router.post("/instructor/signup", signupInstructor);
+router.post("/instructor/resend-otp", resendInstructorOtp);
+router.post("/instructor/verify-otp", verifyInstructorOtp);
+router.get("/instructor/profile", instructorAuth, getInstructorProfile);
+router.put("/instructor/profile", instructorAuth, updateInstructorProfile);
+router.post("/instructor/logout", instructorAuth, logoutInstructor);
+
+// Student APIs
+router.post("/student/signup", signupStudent);
+router.post("/student/login", loginStudent);
+router.post("/student/resend-otp", resendStudentOtp);
+router.post("/student/verify-otp", verifyStudentOtp);
+router.get("/student/profile", studentAuth, getStudentProfile);
+router.put("/student/profile", studentAuth, updateStudentProfile);
+
+// Instructor APIs (only see/manage their own students)
+router.get("/instructor/students", instructorAuth, getMyStudents);
+router.delete("/instructor/student/:sid", instructorAuth, deleteMyStudent);
+
+// Admin APIs
+router.get("/admin/students", authMiddleware, getAllStudents);
+router.get("/admin/students/instructor/:iid", authMiddleware, getStudentsByInstructor);
+router.get("/admin/students/outside", authMiddleware, getOutsideStudents);
+router.delete("/admin/student/:sid", authMiddleware, deleteStudent);
 
 // Public Blog APIs
 router.get("/blogs", getBlogs);
@@ -106,20 +154,6 @@ router.put("/gallery/:id", authMiddleware, updateGallery);
 router.get("/gallery", getGallery);
 router.delete("/gallery/soft/:id", authMiddleware, softDeleteGallery);
 router.delete("/gallery/perma/:id", authMiddleware, permanentDeleteGallery);
-
-// Instructor APIs ---
-router.get("/instructors", getAllInstructors);
-router.post("/instructor/generate", authMiddleware, generateInstructorId);
-router.delete("/instructor/soft/:iid", authMiddleware, softDeleteInstructor);
-router.delete("/instructor/perma/:iid", authMiddleware, permaDeleteInstructor);
-
-router.post("/instructor/login", loginInstructor);
-router.post("/instructor/signup", signupInstructor);
-router.post("/instructor/resend-otp", resendInstructorOtp);
-router.post("/instructor/verify-otp", verifyInstructorOtp);
-router.get("/instructor/profile", instructorAuth, getInstructorProfile);
-router.put("/instructor/profile", instructorAuth, updateInstructorProfile);
-router.post("/instructor/logout", instructorAuth, logoutInstructor);
 
 // Dojo APIs ---
 router.get("/dojo", fetchAllDojo);
