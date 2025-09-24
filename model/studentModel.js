@@ -1,9 +1,10 @@
+// model/studentModel.js
 const mongoose = require("mongoose");
 
 const studentSchema = new mongoose.Schema(
   {
     name: { type: String, required: true },
-    email: { type: String, required: true, unique: true },
+    email: { type: String, required: true },
     mobile: { type: String },
     presentKyu: { type: String },
     lastCertificateNum: { type: String },

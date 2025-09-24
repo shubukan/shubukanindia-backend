@@ -28,9 +28,9 @@ exports.signupStudent = async (req, res) => {
       instructorId,
     } = req.body;
 
-    const existing = await Student.findOne({ email });
-    if (existing)
-      return res.status(400).json({ message: "Email already registered" });
+    // const existing = await Student.findOne({ email });
+    // if (existing)
+    //   return res.status(400).json({ message: "Email already registered" });
 
     const student = await Student.create({
       name,
@@ -172,17 +172,66 @@ exports.updateStudentProfile = async (req, res) => {
   }
 };
 
-// Delete (by instructor/admin)
-exports.deleteStudent = async (req, res) => {
+// Instructor fetch their students
+exports.getMyStudents = async (req, res) => {
+  try {
+    const students = await Student.find({
+      instructorId: req.instructor.instructorId,
+      isDeleted: false,
+    });
+    return res.json(students);
+  } catch (error) {
+    return res.status(500).json({ message: error.message });
+  }
+};
+
+// Instructor delete only their student
+exports.deleteMyStudent = async (req, res) => {
   try {
     const { sid } = req.params;
-    const student = await Student.findByIdAndUpdate(
-      sid,
+    const student = await Student.findOneAndUpdate(
+      { _id: sid, instructorId: req.instructor.instructorId, isDeleted: false },
       { isDeleted: true },
       { new: true }
     );
-    if (!student) return res.status(404).json({ message: "Student not found" });
-    return res.json({ message: "Student soft deleted" });
+
+    if (!student) return res.status(404).json({ message: "Student not found or not under you" });
+    return res.json({ message: "Student soft deleted by instructor" });
+  } catch (error) {
+    return res.status(500).json({ message: error.message });
+  }
+};
+
+// Instructor: search only among their own students
+exports.searchMyStudentsByName = async (req, res) => {
+  try {
+    const { name } = req.query;
+    if (!name) return res.status(400).json({ message: "Name query required" });
+
+    const students = await Student.find({
+      instructorId: req.instructor.instructorId,
+      isDeleted: false,
+      name: { $regex: name, $options: "i" }, // case-insensitive search
+    });
+
+    return res.json(students);
+  } catch (error) {
+    return res.status(500).json({ message: error.message });
+  }
+};
+
+// Admin: search all students
+exports.searchAllStudentsByName = async (req, res) => {
+  try {
+    const { name } = req.query;
+    if (!name) return res.status(400).json({ message: "Name query required" });
+
+    const students = await Student.find({
+      isDeleted: false,
+      name: { $regex: name, $options: "i" },
+    });
+
+    return res.json(students);
   } catch (error) {
     return res.status(500).json({ message: error.message });
   }
@@ -234,31 +283,17 @@ exports.getOutsideStudents = async (req, res) => {
   }
 };
 
-// Instructor fetch their students
-exports.getMyStudents = async (req, res) => {
-  try {
-    const students = await Student.find({
-      instructorId: req.instructor.instructorId,
-      isDeleted: false,
-    });
-    return res.json(students);
-  } catch (error) {
-    return res.status(500).json({ message: error.message });
-  }
-};
-
-// Instructor delete only their student
-exports.deleteMyStudent = async (req, res) => {
+// Delete by admin
+exports.deleteStudent = async (req, res) => {
   try {
     const { sid } = req.params;
-    const student = await Student.findOneAndUpdate(
-      { _id: sid, instructorId: req.instructor.instructorId, isDeleted: false },
+    const student = await Student.findByIdAndUpdate(
+      sid,
       { isDeleted: true },
       { new: true }
     );
-
-    if (!student) return res.status(404).json({ message: "Student not found or not under you" });
-    return res.json({ message: "Student soft deleted by instructor" });
+    if (!student) return res.status(404).json({ message: "Student not found" });
+    return res.json({ message: "Student soft deleted" });
   } catch (error) {
     return res.status(500).json({ message: error.message });
   }

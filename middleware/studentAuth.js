@@ -1,3 +1,4 @@
+// middleware/studentAuth.js
 const jwt = require("jsonwebtoken");
 const StudentModel = require("../model/studentModel");
 
