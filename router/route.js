@@ -51,8 +51,10 @@ const {
   updateStudentProfile,
   deleteStudent,          // Admin only
   getAllStudents,         // Admin only
-  getStudentsByInstructor,// Admin only
   getOutsideStudents,     // Admin only
+  getStudentsByInstructor,// Admin only
+  searchAllStudentsByName,// Admin only
+  searchMyStudentsByName, // Instructor
   getMyStudents,          // Instructor
   deleteMyStudent,        // Instructor
 } = require("../controller/studentCtrl");
@@ -94,35 +96,37 @@ router.post("/admin/logout", authMiddleware, adminLogout);
 router.post("/admin/validate", authMiddleware, adminValidate);
 // router.post("/admin/create", createAdmin); // one-time use
 
-// Instructor APIs ---
-router.get("/instructors", getAllInstructors);
-router.post("/instructor/generate", authMiddleware, generateInstructorId);
-router.delete("/instructor/soft/:iid", authMiddleware, softDeleteInstructor);
-router.delete("/instructor/perma/:iid", authMiddleware, permaDeleteInstructor);
 
+// Public Instructor APIs
+router.get("/instructors", getAllInstructors);
 router.post("/instructor/login", loginInstructor);
 router.post("/instructor/signup", signupInstructor);
 router.post("/instructor/resend-otp", resendInstructorOtp);
 router.post("/instructor/verify-otp", verifyInstructorOtp);
+// Instructor APIs
+router.post("/instructor/logout", instructorAuth, logoutInstructor);
 router.get("/instructor/profile", instructorAuth, getInstructorProfile);
 router.put("/instructor/profile", instructorAuth, updateInstructorProfile);
-router.post("/instructor/logout", instructorAuth, logoutInstructor);
+// Admin Instructor APIs
+router.post("/admin/instructor/generate", authMiddleware, generateInstructorId);
+router.delete("/admin/instructor/soft/:iid", authMiddleware, softDeleteInstructor);
+router.delete("/admin/instructor/perma/:iid", authMiddleware, permaDeleteInstructor);
 
 // Student APIs
-router.post("/student/signup", signupStudent);
 router.post("/student/login", loginStudent);
+router.post("/student/signup", signupStudent);
 router.post("/student/resend-otp", resendStudentOtp);
 router.post("/student/verify-otp", verifyStudentOtp);
 router.get("/student/profile", studentAuth, getStudentProfile);
 router.put("/student/profile", studentAuth, updateStudentProfile);
-
-// Instructor APIs (only see/manage their own students)
+// Instructor only see/manage their own students
 router.get("/instructor/students", instructorAuth, getMyStudents);
 router.delete("/instructor/student/:sid", instructorAuth, deleteMyStudent);
-
-// Admin APIs
+router.get("/instructor/student/search", instructorAuth, searchMyStudentsByName);
+// Admin Student APIs
 router.get("/admin/students", authMiddleware, getAllStudents);
-router.get("/admin/students/instructor/:iid", authMiddleware, getStudentsByInstructor);
+router.get("/admin/student/search", authMiddleware, searchAllStudentsByName);
+router.get("/admin/student/:iid", authMiddleware, getStudentsByInstructor);
 router.get("/admin/students/outside", authMiddleware, getOutsideStudents);
 router.delete("/admin/student/:sid", authMiddleware, deleteStudent);
 

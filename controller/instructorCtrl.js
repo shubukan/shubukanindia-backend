@@ -24,10 +24,10 @@ const generateId = () => {
 // Admin creates new Instructor ID
 exports.generateInstructorId = async (req, res) => {
   try {
-    const { name, location } = req.body;
+    const { name, identity } = req.body;
     if (!name) return res.status(400).json({ message: "Name required" });
-    if (!location)
-      return res.status(400).json({ message: "Location required" });
+    if (!identity)
+      return res.status(400).json({ message: "Identity required" });
 
     let instructorId;
     let exists = true;
@@ -40,7 +40,7 @@ exports.generateInstructorId = async (req, res) => {
 
     const instructor = await InstructorIDModel.create({
       name,
-      location,
+      identity,
       instructorId,
     });
 
