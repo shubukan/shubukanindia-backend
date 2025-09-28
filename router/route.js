@@ -6,6 +6,7 @@ const {
   createBlog,
   getBlogs,
   getBlogBySlug,
+  getCloudBlogSignature,
   updateBlog,
   softDeleteBlog,
   permanentDeleteBlog,
@@ -26,7 +27,7 @@ const {
   updateGallery,
   softDeleteGallery,
   permanentDeleteGallery,
-  getCloudinarySignature,
+  getCloudGallerySignature,
   createGalleryWithUrl,
 } = require("../controller/galleryCtrl");
 const {
@@ -58,6 +59,30 @@ const {
   getMyStudents,          // Instructor
   deleteMyStudent,        // Instructor
 } = require("../controller/studentCtrl");
+const {
+  createQuestion,
+  updateQuestion,
+  deleteQuestion,
+  getAllQuestions
+} = require("../controller/questionCtrl");
+const {
+  createExam,
+  createExamSet,
+  updateExam,
+  deleteExam,
+  getUpcomingExams,
+  startExam,
+  getAllExams
+} = require("../controller/examCtrl");
+const {
+  submitExam,
+  getResultsByInstructor,
+  searchResultsByStudentName,
+  viewAnswerSheet,
+  getQuestionPaper,
+  getMyResults,
+  getAllResults
+} = require("../controller/resultCtrl");
 const {
   createDojo,
   fetchAllDojo,
@@ -96,7 +121,6 @@ router.post("/admin/logout", authMiddleware, adminLogout);
 router.post("/admin/validate", authMiddleware, adminValidate);
 // router.post("/admin/create", createAdmin); // one-time use
 
-
 // Public Instructor APIs
 router.get("/instructors", getAllInstructors);
 router.post("/instructor/login", loginInstructor);
@@ -130,6 +154,37 @@ router.get("/admin/student/:iid", authMiddleware, getStudentsByInstructor);
 router.get("/admin/students/outside", authMiddleware, getOutsideStudents);
 router.delete("/admin/student/:sid", authMiddleware, deleteStudent);
 
+// QUESTION routes
+router.get("/admin/questions", authMiddleware, getAllQuestions);
+router.post("/admin/question", authMiddleware, createQuestion); // admin create
+router.put("/admin/question/:id", authMiddleware, updateQuestion); // admin update
+router.delete("/admin/question/:id", authMiddleware, deleteQuestion); // admin delete
+
+// EXAM routes
+router.get("/admin/exams", authMiddleware, getAllExams);
+router.post("/admin/exam", authMiddleware, createExam); // admin create exam
+router.post("/admin/exam/:examID/set", authMiddleware, createExamSet); // admin create another set for examID
+router.put("/admin/exam/:id", authMiddleware, updateExam); // admin edit upcoming exam
+router.delete("/admin/exam/:id", authMiddleware, deleteExam); // admin delete upcoming exam
+
+// fetch upcoming exams (public)
+router.get("/exams/upcoming", getUpcomingExams);
+
+// Admin view result
+router.get("/admin/results", authMiddleware, getAllResults);
+
+// STUDENT routes to start and submit
+router.post("/student/exam/start", studentAuth, startExam); // body: { examID, examSet, password? }
+router.post("/student/exam/:examId/submit", studentAuth, submitExam);
+router.get("/student/results", studentAuth, getMyResults);
+
+// INSTRUCTOR routes
+router.get("/instructor/results", instructorAuth, getResultsByInstructor); // optional ?date=YYYY-MM-DD
+router.get("/instructor/result/search", instructorAuth, searchResultsByStudentName); // ?name=...
+router.get("/instructor/result/:resultId/sheet", instructorAuth, viewAnswerSheet);
+router.get("/instructor/question-papers", instructorAuth, getQuestionPaper); // ?kyu=&fromDate=&toDate=
+
+
 // Public Blog APIs
 router.get("/blogs", getBlogs);
 router.get("/slugs", getBlogSlugs);
@@ -146,13 +201,14 @@ router.post("/blog/comment/:slug", emailAuth, addComment);
 router.post("/blog/comment/reply/:slug/:commentId", emailAuth, replyComment);
 
 // Admin Blog APIs
+router.post("/blog/signature", authMiddleware, getCloudBlogSignature);
 router.post("/blog", authMiddleware, createBlog);
 router.put("/blog/:id", authMiddleware, updateBlog);
 router.delete("/blog/soft/:id", authMiddleware, softDeleteBlog);
 router.delete("/blog/perma/:id", authMiddleware, permanentDeleteBlog);
 
 // Gallery APIs ---
-router.post("/gallery/signature", authMiddleware, getCloudinarySignature);
+router.post("/gallery/signature", authMiddleware, getCloudGallerySignature);
 router.post("/gallery", authMiddleware, createGalleryWithUrl);
 router.put("/gallery/:id", authMiddleware, updateGallery);
 router.get("/gallery", getGallery);
