@@ -1,3 +1,4 @@
+// controller/studentCtrl.js
 const Student = require("../model/studentModel");
 const Instructor = require("../model/instructorModel");
 const jwt = require("jsonwebtoken");
