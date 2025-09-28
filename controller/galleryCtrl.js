@@ -1,7 +1,7 @@
 const galleryModel = require("../model/galleryModel");
 const cloudinary = require("../config/cloudinary");
 
-exports.getCloudinarySignature = async (req, res) => {
+exports.getCloudGallerySignature = async (req, res) => {
   try {
     const timestamp = Math.round(new Date().getTime() / 1000);
 

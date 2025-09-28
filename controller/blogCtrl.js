@@ -1,3 +1,4 @@
+// controller/blogCtrl.js
 const Blog = require("../model/blogModel");
 const BlogUser = require("../model/blogUserModel");
 const BlogView = require("../model/blogViewModel");
@@ -5,6 +6,32 @@ const crypto = require("crypto");
 const { sendEmail } = require("../util/sendEmail");
 const { blogOtpEmailTemplate } = require("../util/emailTemplate");
 const { addVerifiedUser } = require("../middleware/emailAuth");
+const cloudinary = require("../config/cloudinary");
+
+exports.getCloudBlogSignature = async (req, res) => {
+  try {
+    const timestamp = Math.round(new Date().getTime() / 1000);
+
+    // Generate the signature
+    const signature = cloudinary.utils.api_sign_request(
+      {
+        timestamp: timestamp,
+        folder: "Shubukan/Blog",
+      },
+      process.env.CLOUDINARY_API_SECRET
+    );
+
+    // Return the necessary data for frontend
+    return res.json({
+      signature,
+      timestamp,
+      apiKey: process.env.CLOUDINARY_API_KEY,
+      cloudName: process.env.CLOUDINARY_CLOUD_NAME,
+    });
+  } catch (error) {
+    return res.status(500).json({ message: error.message });
+  }
+};
 
 exports.incrementBlogView = async (req, res) => {
   try {
