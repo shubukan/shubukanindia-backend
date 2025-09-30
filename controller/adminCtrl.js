@@ -70,10 +70,26 @@ exports.adminLogin = async (req, res) => {
     admin.refreshToken = refreshToken;
     await admin.save();
 
+    // ✅ Set cookies
+    res.cookie("adminToken", token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
+      path: "/",
+      maxAge: 60 * 60 * 1000, // 1 hour
+    });
+
+    res.cookie("refreshToken", refreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
+      path: "/",
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+    });
+
     return res.status(200).json({
       success: true,
-      token,
-      refreshToken,
+      message: "Login successful",
     });
   } catch (error) {
     console.error(error);
@@ -85,7 +101,7 @@ exports.adminLogin = async (req, res) => {
 };
 
 exports.refreshTokenController = async (req, res) => {
-  const { refreshToken } = req.body;
+  const refreshToken = req.cookies.refreshToken; // ✅ now read from cookies
   if (!refreshToken) {
     return res
       .status(401)
@@ -106,7 +122,16 @@ exports.refreshTokenController = async (req, res) => {
       expiresIn: "1h",
     });
 
-    return res.json({ success: true, token: newAccessToken });
+    // ✅ update cookie
+    res.cookie("adminToken", newAccessToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
+      path: "/",
+      maxAge: 60 * 60 * 1000,
+    });
+
+    return res.json({ success: true });
   } catch (err) {
     return res
       .status(403)
@@ -116,8 +141,15 @@ exports.refreshTokenController = async (req, res) => {
 
 exports.adminLogout = async (req, res) => {
   try {
-    req.admin.refreshToken = null;
-    await req.admin.save();
+    if (req.admin) {
+      req.admin.refreshToken = null;
+      await req.admin.save();
+    }
+
+    // ✅ Clear cookies
+    res.clearCookie("adminToken", { path: "/" });
+    res.clearCookie("refreshToken", { path: "/" });
+
     return res.json({ success: true, message: "Logged out successfully" });
   } catch (error) {
     return res
@@ -132,4 +164,3 @@ exports.adminValidate = async (req, res) => {
     admin: { id: req.admin.id, lastActive: req.admin.lastActive },
   });
 };
-// end of adminCtrl.js
