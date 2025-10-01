@@ -74,7 +74,9 @@ const {
   deleteExam,
   getUpcomingExams,
   startExam,
-  getAllExams
+  getAllExams,
+  getInstructorUpcomingExams,
+  getStudentUpcomingExams
 } = require("../controller/examCtrl");
 const {
   submitExam,
