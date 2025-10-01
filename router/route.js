@@ -42,6 +42,8 @@ const {
   updateInstructorProfile,
   logoutInstructor,
   resendInstructorOtp,
+  editInstructor,
+  getPublicInstructors,
 } = require("../controller/instructorCtrl");
 const {
   signupStudent,
