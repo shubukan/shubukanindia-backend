@@ -74,7 +74,9 @@ const {
   deleteExam,
   getUpcomingExams,
   startExam,
-  getAllExams
+  getAllExams,
+  getInstructorUpcomingExams,
+  getStudentUpcomingExams
 } = require("../controller/examCtrl");
 const {
   submitExam,
@@ -170,18 +172,20 @@ router.post("/admin/exam", authMiddleware, createExam); // admin create exam
 router.post("/admin/exam/:examID/set", authMiddleware, createExamSet); // admin create another set for examID
 router.put("/admin/exam/:id", authMiddleware, updateExam); // admin edit upcoming exam
 router.delete("/admin/exam/:id", authMiddleware, deleteExam); // admin delete upcoming exam
-
 // fetch upcoming exams (public)
 router.get("/exams/upcoming", getUpcomingExams);
-
-// Admin view result
-router.get("/admin/results", authMiddleware, getAllResults);
+// Upcoming exams for students
+router.get("/student/exams/upcoming", studentAuth, getStudentUpcomingExams);
+// Upcoming exams for instructors
+router.get("/instructor/exams/upcoming", instructorAuth, getInstructorUpcomingExams);
 
 // STUDENT routes to start and submit
 router.post("/student/exam/start", studentAuth, startExam); // body: { examID, examSet, password? }
 router.post("/student/exam/:examId/submit", studentAuth, submitExam);
-router.get("/student/results", studentAuth, getMyResults);
 
+router.get("/student/results", studentAuth, getMyResults);
+// Admin view result
+router.get("/admin/results", authMiddleware, getAllResults);
 // INSTRUCTOR routes
 router.get("/instructor/results", instructorAuth, getResultsByInstructor); // optional ?date=YYYY-MM-DD
 router.get("/instructor/result/search", instructorAuth, searchResultsByStudentName); // ?name=...

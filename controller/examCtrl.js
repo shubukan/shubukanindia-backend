@@ -259,6 +259,44 @@ exports.getUpcomingExams = async (req, res) => {
   }
 };
 
+// Upcoming exams for students (only public)
+exports.getStudentUpcomingExams = async (req, res) => {
+  try {
+    const now = new Date();
+    const exams = await ExamModel.find({
+      examDate: { $gte: now },
+      isDeleted: false,
+      accessability: "public",
+    }).select("-__v -createdAt -updatedAt");
+
+    return res.json(exams);
+  } catch (error) {
+    return res.status(500).json({ message: error.message });
+  }
+};
+
+// Upcoming exams for instructors (public + allInstructors + own exams)
+exports.getInstructorUpcomingExams = async (req, res) => {
+  try {
+    const now = new Date();
+    const instructorId = req.user?.id; // from authMiddleware
+
+    const exams = await ExamModel.find({
+      examDate: { $gte: now },
+      isDeleted: false,
+      $or: [
+        { accessability: "public" },
+        { accessability: "allInstructors" },
+        { accessability: "instructor", instructorId: instructorId },
+      ],
+    }).select("-__v -createdAt -updatedAt");
+
+    return res.json(exams);
+  } catch (error) {
+    return res.status(500).json({ message: error.message });
+  }
+};
+
 // Student tries to start exam by examID + examSet + optional password
 // returns waiting info or the exam payload (questions with options only, not correct answer)
 exports.startExam = async (req, res) => {
