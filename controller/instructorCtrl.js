@@ -55,7 +55,7 @@ exports.getPublicInstructors = async (req, res) => {
   try {
     const instructors = await InstructorIDModel.find(
       { isDeleted: false },
-      { name: 1, instructorId: 1 } // only return these fields + _id by default
+      { name: 1, identity: 1 } // only return these fields + _id by default
     );
 
     return res.json({ instructors });
