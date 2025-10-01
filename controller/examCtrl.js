@@ -299,74 +299,104 @@ exports.getInstructorUpcomingExams = async (req, res) => {
 
 // Student tries to start exam by examID + examSet + optional password
 // returns waiting info or the exam payload (questions with options only, not correct answer)
+// Student tries to start exam by examID + optional password
 exports.startExam = async (req, res) => {
   try {
-    const { examID, examSet, password } = req.body;
-    if (!examID || !examSet)
-      return res.status(400).json({ message: "examID and examSet required" });
-
-    const exam = await ExamModel.findOne({
-      examID,
-      examSet,
-      isDeleted: false,
-    }).populate("questions", "-answer -__v -createdAt -updatedAt");
-    if (!exam) return res.status(404).json({ message: "Exam not found" });
-
-    // access checks
-    if (exam.accessability === "instructor") {
-      // student must belong to the instructor or be allowed; assume studentAuth sets req.student
-      if (!req.student)
-        return res.status(401).json({ message: "Student auth required" });
-      if (
-        !req.student.instructorId ||
-        req.student.instructorId !== exam.instructorId
-      ) {
-        return res.status(403).json({ message: "Not allowed for this exam" });
-      }
+    const { examID, password } = req.body;
+    if (!examID) {
+      return res.status(400).json({ message: "examID required" });
     }
 
-    if (exam.password) {
-      if (!password || password !== exam.password) {
+    // Get all sets of this examID
+    const exams = await ExamModel.find({
+      examID,
+      isDeleted: false,
+    }).populate("questions", "-answer -__v -createdAt -updatedAt");
+
+    if (!exams || exams.length === 0) {
+      return res.status(404).json({ message: "Exam not found" });
+    }
+
+    // Ensure password is required for all sets if any set has one
+    const requiresPassword = exams.some(
+      (e) => e.password && e.password.trim() !== ""
+    );
+    if (requiresPassword) {
+      if (!password) {
+        return res.status(403).json({ message: "Password required" });
+      }
+      const match = exams.some(
+        (e) => e.password && e.password.trim() === password.trim()
+      );
+      if (!match) {
         return res.status(403).json({ message: "Invalid password" });
       }
     }
 
     const now = new Date();
-    if (now < new Date(exam.examDate)) {
-      // waiting page info
-      const ms = new Date(exam.examDate) - now;
-      const timeRemains = Math.max(0, Math.floor(ms / 1000)); // seconds
+
+    // Find live exam (examDate <= now < endTime)
+    let liveExam = exams.find(
+      (e) =>
+        now >= new Date(e.examDate) &&
+        now <= new Date(new Date(e.examDate).getTime() + e.examDuration * 60000)
+    );
+
+    if (!liveExam) {
+      // check if any exam already expired (past its end time)
+      const expiredExam = exams.find(
+        (e) => now > new Date(e.examDate).getTime() + e.examDuration * 60000
+      );
+
+      if (expiredExam) {
+        return res.json({
+          status: "expired",
+          examID: expiredExam.examID,
+          examSet: expiredExam.examSet,
+        });
+      }
+
+      // else, it's a future exam
+      const nextExam = exams
+        .filter((e) => new Date(e.examDate) > now)
+        .sort((a, b) => new Date(a.examDate) - new Date(b.examDate))[0];
+
+      if (!nextExam) {
+        return res
+          .status(404)
+          .json({ message: "No upcoming sets for this examID" });
+      }
+
+      const ms = new Date(nextExam.examDate) - now;
       return res.json({
         status: "waiting",
-        examID: exam.examID,
-        examSet: exam.examSet,
-        examDate: exam.examDate,
-        timeRemains, // in seconds
+        examID: nextExam.examID,
+        examSet: nextExam.examSet,
+        examDate: nextExam.examDate,
+        timeRemains: Math.max(0, Math.floor(ms / 1000)),
       });
     }
 
-    // check if student already attempted - don't allow second attempt
-    if (req.student) {
-      const already = await ResultModel.findOne({
-        exam: exam._id,
-        student: req.student._id,
-      });
-      if (already)
-        return res.status(400).json({ message: "Exam already attempted" });
+    // Already attempted?
+    const already = await ResultModel.findOne({
+      exam: liveExam._id,
+      student: req.student._id,
+    });
+    if (already) {
+      return res.status(400).json({ message: "Exam already attempted" });
     }
 
-    // return questions WITHOUT correct answer
-    // questions were populated without 'answer'
+    // ✅ Return live exam without answers
     return res.json({
       status: "ok",
       exam: {
-        _id: exam._id,
-        examID: exam.examID,
-        examSet: exam.examSet,
-        examDuration: exam.examDuration,
-        questions: exam.questions,
-        eachQuestionMarks: exam.eachQuestionMarks,
-        totalQuestionCount: exam.totalQuestionCount,
+        _id: liveExam._id,
+        examID: liveExam.examID,
+        examSet: liveExam.examSet,
+        examDuration: liveExam.examDuration,
+        questions: liveExam.questions,
+        eachQuestionMarks: liveExam.eachQuestionMarks,
+        totalQuestionCount: liveExam.totalQuestionCount,
       },
     });
   } catch (error) {
