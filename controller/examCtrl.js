@@ -72,7 +72,7 @@ exports.createExam = async (req, res) => {
 
     // Prevent duplicate examDate for same examID
     const clash = await ExamModel.findOne({
-      examID,
+      examID: eid,
       examDate: examDate,
       isDeleted: false,
     });
