@@ -4,26 +4,13 @@ const cors = require("cors");
 const connectDB = require("./db/connection");
 const route = require("./router/route");
 
+// require("./db/connection")
+
 const app = express();
 
-const allowedOrigins = ["http://localhost:3000", "https://shubukanindia.org", "https://www.shubukanindia.org"];
-
-app.use(
-  cors({
-    origin: function (origin, callback) {
-      if (!origin || allowedOrigins.includes(origin)) {
-        callback(null, true);
-      } else {
-        callback(new Error("Not allowed by CORS"));
-      }
-    },
-    credentials: true, // ✅ allow cookies
-  })
-);
-
+app.use(cors({ origin: "*" }));
 app.use(express.json());
 app.use(route);
-
 connectDB();
 
 const PORT = process.env.PORT || 1234;
