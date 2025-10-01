@@ -50,11 +50,54 @@ exports.generateInstructorId = async (req, res) => {
   }
 };
 
+// For public
+exports.getPublicInstructors = async (req, res) => {
+  try {
+    const instructors = await InstructorIDModel.find(
+      { isDeleted: false },
+      { name: 1, instructorId: 1 } // only return these fields + _id by default
+    );
+
+    return res.json({ instructors });
+  } catch (error) {
+    return res.status(500).json({ message: error.message });
+  }
+};
+
 // Get All Instructor
 exports.getAllInstructors = async (req, res) => {
   try {
     const instructors = await InstructorIDModel.find({ isDeleted: false });
     return res.json({ instructors });
+  } catch (error) {
+    return res.status(500).json({ message: error.message });
+  }
+};
+
+// Edit Name and Identity
+exports.editInstructor = async (req, res) => {
+  try {
+    const { iid } = req.params; // instructorId
+    const { name, identity } = req.body;
+
+    if (!name && !identity) {
+      return res.status(400).json({ message: "Nothing to update" });
+    }
+
+    const updatedInstructor = await InstructorIDModel.findOneAndUpdate(
+      { instructorId: iid, isDeleted: false },
+      { $set: { ...(name && { name }), ...(identity && { identity }) } },
+      { new: true }
+    );
+
+    if (!updatedInstructor) {
+      return res.status(404).json({ message: "Instructor not found" });
+    }
+
+    return res.json({
+      message: "Instructor updated successfully",
+      instructor: updatedInstructor,
+    });
   } catch (error) {
     return res.status(500).json({ message: error.message });
   }
