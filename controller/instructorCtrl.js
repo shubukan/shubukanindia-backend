@@ -6,10 +6,6 @@ const jwt = require("jsonwebtoken");
 const { sendEmail } = require("../util/sendEmail");
 const { instructorOtpEmailTemplate } = require("../util/emailTemplate");
 
-// Admin Controllers --------------------------------
-// Temporary in-memory OTP store
-const otpStore = new Map();
-
 // Generate random 10-char alphanumeric Instructor ID
 const generateId = () => {
   const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
@@ -147,8 +143,7 @@ exports.permaDeleteInstructor = async (req, res) => {
 };
 
 // -----------------------------------------------------------------
-
-// ReSend OTP (Signup/Login)
+// ReSend OTP (Signup/Login) - using DB fields now
 exports.resendInstructorOtp = async (req, res) => {
   try {
     const { email, type } = req.body; // type = "signup" | "login"
@@ -174,11 +169,12 @@ exports.resendInstructorOtp = async (req, res) => {
         .json({ message: "Not verified yet, please signup first" });
     }
 
-    // generate OTP
+    // generate OTP and persist to DB
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    otpStore.set(email, { otp, expiresAt: Date.now() + 5 * 60 * 1000 });
+    instructor.otp = otp;
+    instructor.otpExpiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
+    await instructor.save();
 
-    const { instructorOtpEmailTemplate } = require("../util/emailTemplate");
     await sendEmail(
       email,
       "OTP - Shubukan India Exam",
@@ -191,17 +187,11 @@ exports.resendInstructorOtp = async (req, res) => {
   }
 };
 
-// Verify OTP
+// Verify OTP - using DB fields now
 exports.verifyInstructorOtp = async (req, res) => {
   try {
     const { email, otp } = req.body;
-    const data = otpStore.get(email);
-
-    if (!data) return res.status(400).json({ message: "No OTP sent" });
-    if (Date.now() > data.expiresAt)
-      return res.status(400).json({ message: "OTP expired" });
-    if (data.otp !== otp)
-      return res.status(400).json({ message: "Invalid OTP" });
+    if (!email || !otp) return res.status(400).json({ message: "Email and OTP required" });
 
     const instructor = await InstructorModel.findOne({
       email,
@@ -210,8 +200,18 @@ exports.verifyInstructorOtp = async (req, res) => {
     if (!instructor)
       return res.status(404).json({ message: "Instructor not found" });
 
-    otpStore.delete(email);
+    if (!instructor.otp || !instructor.otpExpiresAt)
+      return res.status(400).json({ message: "No OTP sent" });
 
+    if (Date.now() > new Date(instructor.otpExpiresAt).getTime())
+      return res.status(400).json({ message: "OTP expired" });
+
+    if (instructor.otp !== otp)
+      return res.status(400).json({ message: "Invalid OTP" });
+
+    // Clear OTP and mark verified
+    instructor.otp = undefined;
+    instructor.otpExpiresAt = undefined;
     instructor.isVerified = true;
     await instructor.save();
 
@@ -249,23 +249,25 @@ exports.signupInstructor = async (req, res) => {
       return res.status(400).json({ message: "Instructor ID already claimed" });
     }
 
+    // generate OTP
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const otpExpiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
+
     const instructor = await InstructorModel.create({
       name,
       email,
       mobile,
       instructorId,
       isVerified: false,
+      otp,
+      otpExpiresAt,
     });
 
     // Mark the ID as claimed
     existingID.claimed = true;
     await existingID.save();
 
-    // auto trigger OTP
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    otpStore.set(email, { otp, expiresAt: Date.now() + 5 * 60 * 1000 });
-
-    const { instructorOtpEmailTemplate } = require("../util/emailTemplate");
+    // send OTP email
     await sendEmail(
       email,
       "Verify your email - Shubukan India Exam",
@@ -297,11 +299,12 @@ exports.loginInstructor = async (req, res) => {
         .status(400)
         .json({ message: "Instructor not verified. Please sign up first." });
 
-    // generate OTP
+    // generate OTP and persist
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    otpStore.set(email, { otp, expiresAt: Date.now() + 5 * 60 * 1000 });
+    instructor.otp = otp;
+    instructor.otpExpiresAt = new Date(Date.now() + 5 * 60 * 1000);
+    await instructor.save();
 
-    const { instructorOtpEmailTemplate } = require("../util/emailTemplate");
     await sendEmail(
       email,
       "Login OTP - Shubukan India Exam",
@@ -318,7 +321,7 @@ exports.loginInstructor = async (req, res) => {
 exports.getInstructorProfile = async (req, res) => {
   try {
     const instructor = await InstructorModel.findById(req.instructor.id).select(
-      "-__v -createdAt -updatedAt"
+      "-__v -createdAt -updatedAt -otp -otpExpiresAt"
     );
     if (!instructor)
       return res.status(404).json({ message: "Instructor not found" });
@@ -337,7 +340,7 @@ exports.updateInstructorProfile = async (req, res) => {
       req.instructor.id,
       { name, email, mobile },
       { new: true, runValidators: true }
-    ).select("-__v -createdAt -updatedAt");
+    ).select("-__v -createdAt -updatedAt -otp -otpExpiresAt");
 
     if (!updated)
       return res.status(404).json({ message: "Instructor not found" });
