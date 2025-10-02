@@ -3,16 +3,21 @@ const Student = require("../model/studentModel");
 const Instructor = require("../model/instructorModel");
 const jwt = require("jsonwebtoken");
 const { sendEmail } = require("../util/sendEmail");
-const { instructorOtpEmailTemplate } = require("../util/emailTemplate");
-const { studentOtpEmailTemplate } = require("../util/emailTemplate");
-// temporary OTP store
-const otpStore = new Map();
+const { instructorOtpEmailTemplate, studentOtpEmailTemplate } = require("../util/emailTemplate");
 
-// Send OTP helper
+// Send OTP helper - persists OTP to student document
 const sendOtp = async (email, subject) => {
   const otp = Math.floor(100000 + Math.random() * 900000).toString();
-  otpStore.set(email, { otp, expiresAt: Date.now() + 5 * 60 * 1000 });
+  const otpExpiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
 
+  // update student document with otp fields
+  const student = await Student.findOneAndUpdate(
+    { email },
+    { otp, otpExpiresAt },
+    { new: true }
+  );
+
+  // If student not found here, caller should handle (signup flow creates student first)
   await sendEmail(email, subject, studentOtpEmailTemplate(otp));
 };
 
@@ -29,10 +34,6 @@ exports.signupStudent = async (req, res) => {
       instructorId,
     } = req.body;
 
-    // const existing = await Student.findOne({ email });
-    // if (existing)
-    //   return res.status(400).json({ message: "Email already registered" });
-
     const student = await Student.create({
       name,
       email,
@@ -44,7 +45,14 @@ exports.signupStudent = async (req, res) => {
       isVerified: false,
     });
 
-    await sendOtp(email, "Verify your email - Shubukan India Exam (Student)");
+    // send OTP and persist on student document
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const otpExpiresAt = new Date(Date.now() + 5 * 60 * 1000);
+    student.otp = otp;
+    student.otpExpiresAt = otpExpiresAt;
+    await student.save();
+
+    await sendEmail(email, "Verify your email - Shubukan India Exam (Student)", studentOtpEmailTemplate(otp));
 
     return res
       .status(201)
@@ -58,18 +66,23 @@ exports.signupStudent = async (req, res) => {
 exports.verifyStudentOtp = async (req, res) => {
   try {
     const { email, otp } = req.body;
-    const data = otpStore.get(email);
-
-    if (!data) return res.status(400).json({ message: "No OTP sent" });
-    if (Date.now() > data.expiresAt)
-      return res.status(400).json({ message: "OTP expired" });
-    if (data.otp !== otp)
-      return res.status(400).json({ message: "Invalid OTP" });
+    if (!email || !otp) return res.status(400).json({ message: "Email and OTP required" });
 
     const student = await Student.findOne({ email, isDeleted: false });
     if (!student) return res.status(404).json({ message: "Student not found" });
 
-    otpStore.delete(email);
+    if (!student.otp || !student.otpExpiresAt)
+      return res.status(400).json({ message: "No OTP sent" });
+
+    if (Date.now() > new Date(student.otpExpiresAt).getTime())
+      return res.status(400).json({ message: "OTP expired" });
+
+    if (student.otp !== otp)
+      return res.status(400).json({ message: "Invalid OTP" });
+
+    // Clear OTP and mark verified
+    student.otp = undefined;
+    student.otpExpiresAt = undefined;
     student.isVerified = true;
     await student.save();
 
@@ -95,7 +108,13 @@ exports.loginStudent = async (req, res) => {
         .status(400)
         .json({ message: "Student not verified. Please signup first." });
 
-    await sendOtp(email, "Login OTP - Shubukan India Exam (Student)");
+    // generate OTP and persist
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    student.otp = otp;
+    student.otpExpiresAt = new Date(Date.now() + 5 * 60 * 1000);
+    await student.save();
+
+    await sendEmail(email, "Login OTP - Shubukan India Exam (Student)", studentOtpEmailTemplate(otp));
     return res.json({ message: "OTP sent to email for login" });
   } catch (error) {
     return res.status(500).json({ message: error.message });
@@ -122,7 +141,13 @@ exports.resendStudentOtp = async (req, res) => {
         .status(400)
         .json({ message: "Not verified yet, please signup first" });
 
-    await sendOtp(email, `OTP - Shubukan India Exam (Student - ${type})`);
+    // generate OTP and persist
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    student.otp = otp;
+    student.otpExpiresAt = new Date(Date.now() + 5 * 60 * 1000);
+    await student.save();
+
+    await sendEmail(email, `OTP - Shubukan India Exam (Student - ${type})`, studentOtpEmailTemplate(otp));
     return res.json({ message: "OTP resent to email" });
   } catch (error) {
     return res.status(500).json({ message: error.message });
@@ -133,7 +158,7 @@ exports.resendStudentOtp = async (req, res) => {
 exports.getStudentProfile = async (req, res) => {
   try {
     const student = await Student.findById(req.student.id).select(
-      "-__v -createdAt -updatedAt"
+      "-__v -createdAt -updatedAt -otp -otpExpiresAt"
     );
     if (!student) return res.status(404).json({ message: "Student not found" });
     return res.json(student);
@@ -164,7 +189,7 @@ exports.updateStudentProfile = async (req, res) => {
         instructorId,
       },
       { new: true, runValidators: true }
-    ).select("-__v -createdAt -updatedAt");
+    ).select("-__v -createdAt -updatedAt -otp -otpExpiresAt");
 
     if (!updated) return res.status(404).json({ message: "Student not found" });
     return res.json(updated);
