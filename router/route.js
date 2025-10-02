@@ -74,6 +74,8 @@ const {
   deleteExam,
   getUpcomingExams,
   startExam,
+  startExamPublic,
+  submitExamPublic,
   getAllExams,
   getInstructorUpcomingExams,
   getStudentUpcomingExams
@@ -178,6 +180,10 @@ router.get("/exams/upcoming", getUpcomingExams);
 router.get("/student/exams/upcoming", studentAuth, getStudentUpcomingExams);
 // Upcoming exams for instructors
 router.get("/instructor/exams/upcoming", instructorAuth, getInstructorUpcomingExams);
+
+// public start (no auth)
+router.post("/exam/start", startExamPublic);                
+router.post("/exam/:examId/submit", submitExamPublic);
 
 // STUDENT routes to start and submit
 router.post("/student/exam/start", studentAuth, startExam); // body: { examID, examSet, password? }

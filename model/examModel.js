@@ -1,4 +1,3 @@
-// model/examModel.js
 const mongoose = require("mongoose");
 
 const examSchema = new mongoose.Schema(
@@ -7,7 +6,15 @@ const examSchema = new mongoose.Schema(
     examSet: { type: Number, default: 1 },
     password: { type: String }, // optional
     examDuration: { type: Number, required: true }, // minutes
-    examDate: { type: Date, required: true },
+    // examDate required only for non-public exams
+    examDate: {
+      type: Date,
+      required: function () {
+        // `this` is the document
+        // if accessability is 'public' then examDate is NOT required
+        return this.accessability !== "public";
+      },
+    },
     accessability: {
       type: String,
       enum: ["instructor", "allInstructors", "public"],

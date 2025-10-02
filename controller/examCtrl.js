@@ -30,7 +30,6 @@ exports.getAllExams = async (req, res) => {
 exports.createExam = async (req, res) => {
   try {
     const {
-      // examID,
       examSet,
       password,
       examDuration,
@@ -43,14 +42,19 @@ exports.createExam = async (req, res) => {
       eachQuestionMarks,
     } = req.body;
 
+    // examDate is required only for non-public exams
     if (
       !examDuration ||
-      !examDate ||
-      !accessability ||
+      accessability === undefined ||
       !questions ||
       !eachQuestionMarks
     ) {
       return res.status(400).json({ message: "Missing required fields" });
+    }
+    if (accessability !== "public" && !examDate) {
+      return res
+        .status(400)
+        .json({ message: "examDate is required for non-public exams" });
     }
 
     // validate questions exist
@@ -61,25 +65,26 @@ exports.createExam = async (req, res) => {
     if (foundCount !== questions.length)
       return res.status(400).json({ message: "Some questions not found" });
 
-    // generate examID if not provided
+    // generate unique examID
     let eid;
-    // ensure uniqueness
     let exists = true;
     while (exists) {
       eid = generateExamId();
       exists = await ExamModel.exists({ examID: eid });
     }
 
-    // Prevent duplicate examDate for same examID
-    const clash = await ExamModel.findOne({
-      examID: eid,
-      examDate: examDate,
-      isDeleted: false,
-    });
-    if (clash) {
-      return res
-        .status(400)
-        .json({ message: "Another set already scheduled at this exact time" });
+    // If examDate provided, check clash for same examID at exact time (only relevant when examDate exists)
+    if (examDate) {
+      const clash = await ExamModel.findOne({
+        examID: eid,
+        examDate: examDate,
+        isDeleted: false,
+      });
+      if (clash) {
+        return res.status(400).json({
+          message: "Another set already scheduled at this exact time",
+        });
+      }
     }
 
     // compute totals
@@ -91,7 +96,7 @@ exports.createExam = async (req, res) => {
       examSet: examSet || 1,
       password,
       examDuration,
-      examDate,
+      examDate: examDate || undefined,
       accessability,
       instructorId,
       instructorName,
@@ -111,7 +116,7 @@ exports.createExam = async (req, res) => {
 // Create new set for existing examID (admin)
 exports.createExamSet = async (req, res) => {
   try {
-    const { examID } = req.params; // e.g. /admin/exam/:examID/set
+    const { examID } = req.params;
     const {
       examSet,
       password,
@@ -124,17 +129,17 @@ exports.createExamSet = async (req, res) => {
       questions,
       eachQuestionMarks,
     } = req.body;
-    if (
-      !examSet ||
-      !examDuration ||
-      !examDate ||
-      !questions ||
-      !eachQuestionMarks
-    ) {
+
+    // examDate required only for non-public
+    if (!examSet || !examDuration || !questions || !eachQuestionMarks) {
       return res.status(400).json({ message: "Missing required fields" });
     }
+    if (accessability !== "public" && !examDate) {
+      return res
+        .status(400)
+        .json({ message: "examDate is required for non-public exams" });
+    }
 
-    // ensure examID exists in some base form? not necessary.
     const foundCount = await QuestionModel.countDocuments({
       _id: { $in: questions },
       isDeleted: false,
@@ -150,7 +155,7 @@ exports.createExamSet = async (req, res) => {
       examSet,
       password,
       examDuration,
-      examDate,
+      examDate: examDate || undefined,
       accessability,
       instructorId,
       instructorName,
@@ -177,8 +182,8 @@ exports.updateExam = async (req, res) => {
     if (!exam || exam.isDeleted)
       return res.status(404).json({ message: "Exam not found" });
 
-    // cannot edit past exam
-    if (new Date(exam.examDate) <= new Date()) {
+    // cannot edit past exam — but if exam has no examDate (public on-demand), allow edits
+    if (exam.examDate && new Date(exam.examDate) <= new Date()) {
       return res.status(400).json({ message: "Cannot edit past exams" });
     }
 
@@ -230,7 +235,8 @@ exports.deleteExam = async (req, res) => {
     if (!exam || exam.isDeleted)
       return res.status(404).json({ message: "Exam not found" });
 
-    if (new Date(exam.examDate) <= new Date()) {
+    // If exam has an examDate, enforce cannot delete past exams. If no date (public on-demand), allow delete.
+    if (exam.examDate && new Date(exam.examDate) <= new Date()) {
       return res.status(400).json({ message: "Cannot delete past exams" });
     }
 
@@ -245,11 +251,46 @@ exports.deleteExam = async (req, res) => {
 // Get upcoming exams available for a student or instructor (filter by accessability/kyu)
 exports.getUpcomingExams = async (req, res) => {
   try {
-    const { accessability, kyu } = req.query; // optional filters
+    const { accessability, kyu } = req.query;
     const now = new Date();
-    const query = { examDate: { $gte: now }, isDeleted: false };
+
+    // Build flexible query:
+    // - Include any exam with examDate >= now
+    // - ALSO include public exams that don't have examDate (available anytime)
+    const baseConditions = [{ examDate: { $gte: now } }]; // scheduled & not passed
+
+    // public-on-demand (no examDate) condition
+    baseConditions.push({
+      accessability: "public",
+      examDate: { $exists: false },
+    });
+    baseConditions.push({ accessability: "public", examDate: null });
+
+    const query = { isDeleted: false, $or: baseConditions };
+
     if (accessability) query.accessability = accessability;
     if (kyu) query.kyu = kyu;
+
+    // If accessability is provided and is not "public", we should only include scheduled exams (examDate >= now).
+    // To handle that correctly, adjust query when accessability !== 'public'
+    if (accessability && accessability !== "public") {
+      // only scheduled of that accessibility
+      Object.assign(query, {
+        isDeleted: false,
+        accessability,
+        examDate: { $gte: now },
+      });
+      delete query.$or;
+    } else if (accessability === "public") {
+      // when asking for only public, include both scheduled (>= now) and unscheduled (null/missing)
+      Object.assign(query, { isDeleted: false, accessability });
+      query.$or = [
+        { examDate: { $gte: now } },
+        { examDate: { $exists: false } },
+        { examDate: null },
+      ];
+    }
+
     const exams = await ExamModel.find(query).select(
       "-__v -createdAt -updatedAt"
     );
@@ -263,10 +304,15 @@ exports.getUpcomingExams = async (req, res) => {
 exports.getStudentUpcomingExams = async (req, res) => {
   try {
     const now = new Date();
+    // Include public scheduled exams (examDate >= now) AND public without date
     const exams = await ExamModel.find({
-      examDate: { $gte: now },
       isDeleted: false,
       accessability: "public",
+      $or: [
+        { examDate: { $gte: now } },
+        { examDate: { $exists: false } },
+        { examDate: null },
+      ],
     }).select("-__v -createdAt -updatedAt");
 
     return res.json(exams);
@@ -281,13 +327,24 @@ exports.getInstructorUpcomingExams = async (req, res) => {
     const now = new Date();
     const instructorId = req.user?.id; // from authMiddleware
 
+    // For public exams: include scheduled (>= now) and unscheduled (no examDate)
     const exams = await ExamModel.find({
-      examDate: { $gte: now },
       isDeleted: false,
       $or: [
-        { accessability: "public" },
-        { accessability: "allInstructors" },
-        { accessability: "instructor", instructorId: instructorId },
+        {
+          accessability: "public",
+          $or: [
+            { examDate: { $gte: now } },
+            { examDate: { $exists: false } },
+            { examDate: null },
+          ],
+        },
+        { accessability: "allInstructors", examDate: { $gte: now } },
+        {
+          accessability: "instructor",
+          instructorId: instructorId,
+          examDate: { $gte: now },
+        },
       ],
     }).select("-__v -createdAt -updatedAt");
 
@@ -297,8 +354,6 @@ exports.getInstructorUpcomingExams = async (req, res) => {
   }
 };
 
-// Student tries to start exam by examID + examSet + optional password
-// returns waiting info or the exam payload (questions with options only, not correct answer)
 // Student tries to start exam by examID + optional password
 exports.startExam = async (req, res) => {
   try {
@@ -335,18 +390,29 @@ exports.startExam = async (req, res) => {
 
     const now = new Date();
 
-    // Find live exam (examDate <= now < endTime)
-    let liveExam = exams.find(
-      (e) =>
-        now >= new Date(e.examDate) &&
-        now <= new Date(new Date(e.examDate).getTime() + e.examDuration * 60000)
-    );
+    // Find live exam:
+    // - scheduled exam: now between examDate and examDate + duration
+    // - OR public exam with NO examDate: treat as live-on-demand (start now)
+    let liveExam = exams.find((e) => {
+      // public on-demand (no examDate) -> live
+      if (
+        e.accessability === "public" &&
+        (!e.examDate || e.examDate === null)
+      ) {
+        return true;
+      }
+      if (!e.examDate) return false;
+      const start = new Date(e.examDate);
+      const end = new Date(start.getTime() + e.examDuration * 60000);
+      return now >= start && now <= end;
+    });
 
     if (!liveExam) {
       // check if any exam already expired (past its end time)
-      const expiredExam = exams.find(
-        (e) => now > new Date(e.examDate).getTime() + e.examDuration * 60000
-      );
+      const expiredExam = exams.find((e) => {
+        if (!e.examDate) return false;
+        return now > new Date(e.examDate).getTime() + e.examDuration * 60000;
+      });
 
       if (expiredExam) {
         return res.json({
@@ -356,9 +422,9 @@ exports.startExam = async (req, res) => {
         });
       }
 
-      // else, it's a future exam
+      // else, it's a future exam (for scheduled sets)
       const nextExam = exams
-        .filter((e) => new Date(e.examDate) > now)
+        .filter((e) => e.examDate && new Date(e.examDate) > now)
         .sort((a, b) => new Date(a.examDate) - new Date(b.examDate))[0];
 
       if (!nextExam) {
@@ -377,16 +443,19 @@ exports.startExam = async (req, res) => {
       });
     }
 
-    // Already attempted?
-    const already = await ResultModel.findOne({
-      exam: liveExam._id,
-      student: req.student._id,
-    });
-    if (already) {
-      return res.status(400).json({ message: "Exam already attempted" });
+    // Already attempted? — only enforce for non-public exams
+    if (liveExam.accessability !== "public") {
+      const already = await ResultModel.findOne({
+        exam: liveExam._id,
+        student: req.student._id,
+      });
+      if (already) {
+        return res.status(400).json({ message: "Exam already attempted" });
+      }
     }
+    // If exam is public, we allow multiple attempts by the same student.
 
-    // ✅ Return live exam without answers
+    // For public on-demand exam with no examDate, we still return the examDuration and questions
     return res.json({
       status: "ok",
       exam: {
@@ -398,6 +467,163 @@ exports.startExam = async (req, res) => {
         eachQuestionMarks: liveExam.eachQuestionMarks,
         totalQuestionCount: liveExam.totalQuestionCount,
       },
+    });
+  } catch (error) {
+    return res.status(500).json({ message: error.message });
+  }
+};
+
+// Public start (no authentication required)
+// Body: { examID, password? }
+exports.startExamPublic = async (req, res) => {
+  try {
+    const { examID, password } = req.body;
+    if (!examID) return res.status(400).json({ message: "examID required" });
+
+    const exams = await ExamModel.find({
+      examID,
+      isDeleted: false,
+    }).populate("questions", "-answer -__v -createdAt -updatedAt");
+
+    if (!exams || exams.length === 0) {
+      return res.status(404).json({ message: "Exam not found" });
+    }
+
+    // if any set requires password, validate password
+    const requiresPassword = exams.some(
+      (e) => e.password && e.password.trim() !== ""
+    );
+    if (requiresPassword) {
+      if (!password)
+        return res.status(403).json({ message: "Password required" });
+      const match = exams.some(
+        (e) => e.password && e.password.trim() === password.trim()
+      );
+      if (!match) return res.status(403).json({ message: "Invalid password" });
+    }
+
+    const now = new Date();
+
+    // find a live exam:
+    // public-on-demand (no examDate) -> live
+    // or scheduled exam where now is between start and end
+    let liveExam = exams.find((e) => {
+      if (
+        e.accessability === "public" &&
+        (!e.examDate || e.examDate === null)
+      ) {
+        return true;
+      }
+      if (!e.examDate) return false;
+      const start = new Date(e.examDate);
+      const end = new Date(start.getTime() + e.examDuration * 60000);
+      return now >= start && now <= end;
+    });
+
+    if (!liveExam) {
+      // expired check (only for those that have dates)
+      const expiredExam = exams.find((e) => {
+        if (!e.examDate) return false;
+        return now > new Date(e.examDate).getTime() + e.examDuration * 60000;
+      });
+
+      if (expiredExam) {
+        return res.json({
+          status: "expired",
+          examID: expiredExam.examID,
+          examSet: expiredExam.examSet,
+        });
+      }
+
+      // otherwise next scheduled
+      const nextExam = exams
+        .filter((e) => e.examDate && new Date(e.examDate) > now)
+        .sort((a, b) => new Date(a.examDate) - new Date(b.examDate))[0];
+
+      if (!nextExam) {
+        return res
+          .status(404)
+          .json({ message: "No upcoming sets for this examID" });
+      }
+
+      const ms = new Date(nextExam.examDate) - now;
+      return res.json({
+        status: "waiting",
+        examID: nextExam.examID,
+        examSet: nextExam.examSet,
+        examDate: nextExam.examDate,
+        timeRemains: Math.max(0, Math.floor(ms / 1000)),
+      });
+    }
+
+    // NOTE: for public exams we DO NOT block repeated attempts.
+    // (If you want to block repeated attempts *only* for scheduled public exams, adjust logic here.)
+
+    return res.json({
+      status: "ok",
+      exam: {
+        _id: liveExam._id,
+        examID: liveExam.examID,
+        examSet: liveExam.examSet,
+        examDuration: liveExam.examDuration,
+        questions: liveExam.questions,
+        eachQuestionMarks: liveExam.eachQuestionMarks,
+        totalQuestionCount: liveExam.totalQuestionCount,
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({ message: error.message });
+  }
+};
+
+// Public submit: no auth required
+// POST /exam/:examId/submit
+// body: { answers: [...], guestName?: string, guestEmail?: string }
+// Public submit: does not save result in DB
+exports.submitExamPublic = async (req, res) => {
+  try {
+    const { examId } = req.params;
+    const { selectedOptions } = req.body;
+
+    if (!selectedOptions) {
+      return res.status(400).json({ message: "Answers required" });
+    }
+
+    const exam = await ExamModel.findById(examId).populate("questions");
+    if (!exam || exam.isDeleted) {
+      return res.status(404).json({ message: "Exam not found" });
+    }
+    if (exam.accessability !== "public") {
+      return res
+        .status(403)
+        .json({ message: "Only public exams allowed here" });
+    }
+
+    let score = 0;
+    let correctCount = 0;
+    const details = [];
+
+    exam.questions.forEach((q, idx) => {
+      const chosen = selectedOptions[idx];
+      const correct = q.answer; // assuming `answer` stores correct option index
+      const isCorrect = chosen === correct;
+      if (isCorrect) {
+        score += exam.eachQuestionMarks;
+        correctCount++;
+      }
+      details.push({
+        qIndex: idx,
+        chosen,
+        correctOption: correct,
+        correct: isCorrect,
+      });
+    });
+
+    return res.json({
+      score,
+      totalMarks: exam.totalMarks,
+      correctCount,
+      details,
     });
   } catch (error) {
     return res.status(500).json({ message: error.message });
