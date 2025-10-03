@@ -2,6 +2,7 @@
 const ExamModel = require("../model/examModel");
 const QuestionModel = require("../model/questionModel");
 const ResultModel = require("../model/resultModel");
+const Counter = require("../model/counterModel");
 
 // helper to generate unique 6 char examID
 const crypto = require("crypto");
@@ -14,16 +15,72 @@ const generateExamId = () => {
   return id;
 };
 
-// View all exams
+// View all exams (admin) - include full question details and nested usedInExams.exam info
 exports.getAllExams = async (req, res) => {
   try {
-    const exams = await ExamModel.find({ isDeleted: false }).populate(
-      "questions"
-    );
+    const exams = await ExamModel.find({ isDeleted: false })
+      // select exam fields you want; remove __v for clarity
+      .select("-__v")
+      .populate({
+        path: "questions",
+        // include almost all fields from question but omit __v and timestamps if you don't need them
+        select: "-__v -createdAt -updatedAt",
+        populate: {
+          // this populates the `exam` ObjectId inside each usedInExams entry
+          path: "usedInExams.exam",
+          model: "Exam",
+          select: "examID examSet accessability examDate isDeleted",
+        },
+      });
+
     return res.json(exams);
   } catch (error) {
+    console.error("getAllExams error:", error);
     return res.status(500).json({ message: error.message });
   }
+};
+
+// Helper: add exam reference to given question IDs and set used true
+const addExamRefToQuestions = async (exam) => {
+  if (!exam.questions || exam.questions.length === 0) return;
+  await QuestionModel.updateMany(
+    { _id: { $in: exam.questions } },
+    {
+      $addToSet: {
+        usedInExams: {
+          exam: exam._id,
+          examID: exam.examID,
+          examSet: exam.examSet,
+          accessability: exam.accessability,
+          examDate: exam.examDate || null,
+        },
+      },
+      $set: { used: true },
+    }
+  );
+};
+
+// Helper: remove exam reference from given question IDs (and update used flag accordingly)
+const removeExamRefFromQuestions = async (examId, questionIds) => {
+  if (!questionIds || questionIds.length === 0) return;
+
+  // pull the exam reference
+  await QuestionModel.updateMany(
+    { _id: { $in: questionIds } },
+    { $pull: { usedInExams: { exam: examId } } }
+  );
+
+  // After pulling, recalc used flag for affected questions
+  const affected = await QuestionModel.find({
+    _id: { $in: questionIds },
+  }).select("_id usedInExams");
+  const bulkOps = affected.map((q) => ({
+    updateOne: {
+      filter: { _id: q._id },
+      update: { $set: { used: q.usedInExams && q.usedInExams.length > 0 } },
+    },
+  }));
+  if (bulkOps.length) await QuestionModel.bulkWrite(bulkOps);
 };
 
 // Create new exam (admin)
@@ -106,6 +163,7 @@ exports.createExam = async (req, res) => {
       totalQuestionCount,
       totalMarks,
     });
+    await addExamRefToQuestions(exam);
 
     return res.status(201).json(exam);
   } catch (error) {
@@ -195,6 +253,17 @@ exports.updateExam = async (req, res) => {
       });
       if (foundCount !== updates.questions.length)
         return res.status(400).json({ message: "Some questions not found" });
+
+      // compute added / removed
+      const oldQuestionIds = exam.questions.map(String);
+      const newQuestionIds = updates.questions.map(String);
+
+      const added = newQuestionIds.filter((id) => !oldQuestionIds.includes(id));
+      const removed = oldQuestionIds.filter(
+        (id) => !newQuestionIds.includes(id)
+      );
+
+      // apply to exam doc
       exam.questions = updates.questions;
       exam.totalQuestionCount = updates.questions.length;
       if (updates.eachQuestionMarks) {
@@ -202,6 +271,23 @@ exports.updateExam = async (req, res) => {
         exam.totalMarks = updates.questions.length * updates.eachQuestionMarks;
       } else {
         exam.totalMarks = updates.questions.length * exam.eachQuestionMarks;
+      }
+
+      // update question usage
+      if (added.length > 0) {
+        // temporarily create a small object to mimic exam for helper usage
+        const miniExam = {
+          _id: exam._id,
+          examID: exam.examID,
+          examSet: exam.examSet,
+          accessability: exam.accessability,
+          examDate: exam.examDate || null,
+          questions: added,
+        };
+        await addExamRefToQuestions(miniExam);
+      }
+      if (removed.length > 0) {
+        await removeExamRefFromQuestions(exam._id, removed);
       }
     }
 
@@ -239,6 +325,11 @@ exports.deleteExam = async (req, res) => {
     if (exam.examDate && new Date(exam.examDate) <= new Date()) {
       return res.status(400).json({ message: "Cannot delete past exams" });
     }
+
+    // before setting exam.isDeleted = true
+    await removeExamRefFromQuestions(exam._id, exam.questions);
+    exam.isDeleted = true;
+    await exam.save();
 
     exam.isDeleted = true;
     await exam.save();

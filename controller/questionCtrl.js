@@ -1,17 +1,27 @@
 // controller/questionCtrl.js
 const Question = require("../model/questionModel");
 const Exam = require("../model/examModel");
+const Counter = require("../model/counterModel");
 
 // View all questions
 exports.getAllQuestions = async (req, res) => {
   try {
-    const questions = await Question.find({ isDeleted: false }).select("-__v");
+    const questions = await Question.find().select("-__v").sort({ createdAt: -1 });
     return res.json(questions);
   } catch (error) {
     return res.status(500).json({ message: error.message });
   }
 };
 
+// helper to get next sequence for questionID
+const getNextQuestionID = async () => {
+  const res = await Counter.findOneAndUpdate(
+    { _id: "questionId" },
+    { $inc: { seq: 1 } },
+    { new: true, upsert: true }
+  );
+  return res.seq;
+};
 
 // Create question (default set = 1)
 exports.createQuestion = async (req, res) => {
@@ -22,7 +32,11 @@ exports.createQuestion = async (req, res) => {
     if (typeof answer !== "number" || answer < 0 || answer >= options.length)
       return res.status(400).json({ message: "Invalid answer index" });
 
+    // get sequential questionID
+    const questionID = await getNextQuestionID();
+
     const q = await Question.create({
+      questionID,
       question,
       options,
       answer,
@@ -35,29 +49,49 @@ exports.createQuestion = async (req, res) => {
   }
 };
 
-// Update question - only if not allocated to any previous exam or allocated only in upcoming exam(s)
+// Update question - only if not part of any scheduled upcoming exam or past exam.
+// If question is only used in public-on-demand exams (no examDate) editing is allowed.
 exports.updateQuestion = async (req, res) => {
   try {
     const { id } = req.params;
     const { question, options, answer, questionSet } = req.body;
 
     const q = await Question.findById(id);
-    if (!q || q.isDeleted) return res.status(404).json({ message: "Question not found" });
+    if (!q)
+      return res.status(404).json({ message: "Question not found" });
 
-    // check if question is used in any past (examDate <= now) exam
-    const usedInPast = await Exam.exists({
+    // Find non-deleted exams that include this question
+    const exams = await Exam.find({
       questions: q._id,
-      examDate: { $lte: new Date() }
-    });
+      isDeleted: false,
+    }).select("examDate");
 
-    if (usedInPast) {
-      return res.status(400).json({ message: "Cannot edit question used in past exams" });
+    const now = new Date();
+
+    // If there are any scheduled exams (have examDate)
+    const scheduledExams = exams.filter((e) => e.examDate);
+    if (scheduledExams.length > 0) {
+      const inPast = scheduledExams.some((e) => new Date(e.examDate) <= now);
+      const inFuture = scheduledExams.some((e) => new Date(e.examDate) > now);
+
+      if (inPast) {
+        return res
+          .status(400)
+          .json({ message: "Cannot edit question used in past exams" });
+      }
+      if (inFuture) {
+        return res
+          .status(400)
+          .json({
+            message: "Cannot edit question used in upcoming scheduled exams",
+          });
+      }
     }
 
-    // safe to update
+    // safe to update (either no exams, or all exams that include it are public on-demand with no examDate)
     q.question = question ?? q.question;
     q.options = options ?? q.options;
-    q.answer = (typeof answer === "number") ? answer : q.answer;
+    q.answer = typeof answer === "number" ? answer : q.answer;
     q.questionSet = questionSet ?? q.questionSet;
     await q.save();
 
@@ -67,21 +101,28 @@ exports.updateQuestion = async (req, res) => {
   }
 };
 
-// Soft delete question - only if not used in any exam (past or upcoming)
+// Permanently delete question - only if not used in any exam (past or upcoming)
 exports.deleteQuestion = async (req, res) => {
   try {
     const { id } = req.params;
     const q = await Question.findById(id);
-    if (!q || q.isDeleted) return res.status(404).json({ message: "Question not found" });
+    if (!q) return res.status(404).json({ message: "Question not found" });
 
-    const usedInAnyExam = await Exam.exists({ questions: q._id });
+    // Prevent deletion if this question is referenced by any non-deleted exam
+    const usedInAnyExam = await Exam.exists({
+      questions: q._id,
+      isDeleted: false,
+    });
     if (usedInAnyExam) {
-      return res.status(400).json({ message: "Cannot delete question allocated to any exam" });
+      return res
+        .status(400)
+        .json({ message: "Cannot delete question allocated to any exam" });
     }
 
-    q.isDeleted = true;
-    await q.save();
-    return res.json({ message: "Question soft deleted" });
+    // Permanently delete the question document
+    await Question.findByIdAndDelete(id);
+
+    return res.json({ message: "Question permanently deleted" });
   } catch (error) {
     return res.status(500).json({ message: error.message });
   }
