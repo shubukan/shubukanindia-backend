@@ -1,9 +1,12 @@
 // controller/studentCtrl.js
-const Student = require("../model/studentModel");
-const Instructor = require("../model/instructorModel");
+const StudentModel = require("../model/studentModel");
+const InstructorModel = require("../model/instructorModel");
 const jwt = require("jsonwebtoken");
 const { sendEmail } = require("../util/sendEmail");
-const { instructorOtpEmailTemplate, studentOtpEmailTemplate } = require("../util/emailTemplate");
+const {
+  instructorOtpEmailTemplate,
+  studentOtpEmailTemplate,
+} = require("../util/emailTemplate");
 
 // Send OTP helper - persists OTP to student document
 const sendOtp = async (email, subject) => {
@@ -11,7 +14,7 @@ const sendOtp = async (email, subject) => {
   const otpExpiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
 
   // update student document with otp fields
-  const student = await Student.findOneAndUpdate(
+  const student = await StudentModel.findOneAndUpdate(
     { email },
     { otp, otpExpiresAt },
     { new: true }
@@ -34,7 +37,11 @@ exports.signupStudent = async (req, res) => {
       instructorId,
     } = req.body;
 
-    const student = await Student.create({
+    const existing = await StudentModel.findOne({ email });
+    if (existing)
+      return res.status(400).json({ message: "Email already registered" });
+
+    const student = await StudentModel.create({
       name,
       email,
       mobile,
@@ -52,7 +59,11 @@ exports.signupStudent = async (req, res) => {
     student.otpExpiresAt = otpExpiresAt;
     await student.save();
 
-    await sendEmail(email, "Verify your email - Shubukan India Exam (Student)", studentOtpEmailTemplate(otp));
+    await sendEmail(
+      email,
+      "Verify your email - Shubukan India Exam (Student)",
+      studentOtpEmailTemplate(otp)
+    );
 
     return res
       .status(201)
@@ -66,9 +77,10 @@ exports.signupStudent = async (req, res) => {
 exports.verifyStudentOtp = async (req, res) => {
   try {
     const { email, otp } = req.body;
-    if (!email || !otp) return res.status(400).json({ message: "Email and OTP required" });
+    if (!email || !otp)
+      return res.status(400).json({ message: "Email and OTP required" });
 
-    const student = await Student.findOne({ email, isDeleted: false });
+    const student = await StudentModel.findOne({ email, isDeleted: false });
     if (!student) return res.status(404).json({ message: "Student not found" });
 
     if (!student.otp || !student.otpExpiresAt)
@@ -100,7 +112,7 @@ exports.verifyStudentOtp = async (req, res) => {
 exports.loginStudent = async (req, res) => {
   try {
     const { email } = req.body;
-    const student = await Student.findOne({ email, isDeleted: false });
+    const student = await StudentModel.findOne({ email, isDeleted: false });
 
     if (!student) return res.status(404).json({ message: "Student not found" });
     if (!student.isVerified)
@@ -114,7 +126,11 @@ exports.loginStudent = async (req, res) => {
     student.otpExpiresAt = new Date(Date.now() + 5 * 60 * 1000);
     await student.save();
 
-    await sendEmail(email, "Login OTP - Shubukan India Exam (Student)", studentOtpEmailTemplate(otp));
+    await sendEmail(
+      email,
+      "Login OTP - Shubukan India Exam (Student)",
+      studentOtpEmailTemplate(otp)
+    );
     return res.json({ message: "OTP sent to email for login" });
   } catch (error) {
     return res.status(500).json({ message: error.message });
@@ -128,7 +144,7 @@ exports.resendStudentOtp = async (req, res) => {
     if (!email || !type)
       return res.status(400).json({ message: "Email and type required" });
 
-    const student = await Student.findOne({ email, isDeleted: false });
+    const student = await StudentModel.findOne({ email, isDeleted: false });
     if (!student) return res.status(404).json({ message: "Student not found" });
 
     if (type === "signup" && student.isVerified)
@@ -147,7 +163,11 @@ exports.resendStudentOtp = async (req, res) => {
     student.otpExpiresAt = new Date(Date.now() + 5 * 60 * 1000);
     await student.save();
 
-    await sendEmail(email, `OTP - Shubukan India Exam (Student - ${type})`, studentOtpEmailTemplate(otp));
+    await sendEmail(
+      email,
+      `OTP - Shubukan India Exam (Student - ${type})`,
+      studentOtpEmailTemplate(otp)
+    );
     return res.json({ message: "OTP resent to email" });
   } catch (error) {
     return res.status(500).json({ message: error.message });
@@ -157,7 +177,7 @@ exports.resendStudentOtp = async (req, res) => {
 // Profile
 exports.getStudentProfile = async (req, res) => {
   try {
-    const student = await Student.findById(req.student.id).select(
+    const student = await StudentModel.findById(req.student.id).select(
       "-__v -createdAt -updatedAt -otp -otpExpiresAt"
     );
     if (!student) return res.status(404).json({ message: "Student not found" });
@@ -178,7 +198,7 @@ exports.updateStudentProfile = async (req, res) => {
       instructorId,
     } = req.body;
 
-    const updated = await Student.findByIdAndUpdate(
+    const updated = await StudentModel.findByIdAndUpdate(
       req.student.id,
       {
         name,
@@ -201,7 +221,7 @@ exports.updateStudentProfile = async (req, res) => {
 // Instructor fetch their students
 exports.getMyStudents = async (req, res) => {
   try {
-    const students = await Student.find({
+    const students = await StudentModel.find({
       instructorId: req.instructor.instructorId,
       isDeleted: false,
     });
@@ -215,13 +235,16 @@ exports.getMyStudents = async (req, res) => {
 exports.deleteMyStudent = async (req, res) => {
   try {
     const { sid } = req.params;
-    const student = await Student.findOneAndUpdate(
+    const student = await StudentModel.findOneAndUpdate(
       { _id: sid, instructorId: req.instructor.instructorId, isDeleted: false },
       { isDeleted: true },
       { new: true }
     );
 
-    if (!student) return res.status(404).json({ message: "Student not found or not under you" });
+    if (!student)
+      return res
+        .status(404)
+        .json({ message: "Student not found or not under you" });
     return res.json({ message: "Student soft deleted by instructor" });
   } catch (error) {
     return res.status(500).json({ message: error.message });
@@ -234,7 +257,7 @@ exports.searchMyStudentsByName = async (req, res) => {
     const { name } = req.query;
     if (!name) return res.status(400).json({ message: "Name query required" });
 
-    const students = await Student.find({
+    const students = await StudentModel.find({
       instructorId: req.instructor.instructorId,
       isDeleted: false,
       name: { $regex: name, $options: "i" }, // case-insensitive search
@@ -252,7 +275,7 @@ exports.searchAllStudentsByName = async (req, res) => {
     const { name } = req.query;
     if (!name) return res.status(400).json({ message: "Name query required" });
 
-    const students = await Student.find({
+    const students = await StudentModel.find({
       isDeleted: false,
       name: { $regex: name, $options: "i" },
     });
@@ -266,7 +289,7 @@ exports.searchAllStudentsByName = async (req, res) => {
 // Admin: fetch all students
 exports.getAllStudents = async (req, res) => {
   try {
-    const students = await Student.find({ isDeleted: false });
+    const students = await StudentModel.find({ isDeleted: false });
     return res.json(students);
   } catch (error) {
     return res.status(500).json({ message: error.message });
@@ -277,7 +300,7 @@ exports.getAllStudents = async (req, res) => {
 exports.getStudentsByInstructor = async (req, res) => {
   try {
     const { iid } = req.params;
-    const students = await Student.find({
+    const students = await StudentModel.find({
       instructorId: iid,
       isDeleted: false,
     });
@@ -290,12 +313,12 @@ exports.getStudentsByInstructor = async (req, res) => {
 // Admin: fetch all outside students
 exports.getOutsideStudents = async (req, res) => {
   try {
-    const instructors = await Instructor.find({ isDeleted: false }).select(
+    const instructors = await InstructorModel.find({ isDeleted: false }).select(
       "instructorId"
     );
     const instructorIds = instructors.map((i) => i.instructorId);
 
-    const students = await Student.find({
+    const students = await StudentModel.find({
       $or: [
         { instructorId: { $exists: false } },
         { instructorId: { $nin: instructorIds } },
@@ -313,7 +336,7 @@ exports.getOutsideStudents = async (req, res) => {
 exports.deleteStudent = async (req, res) => {
   try {
     const { sid } = req.params;
-    const student = await Student.findByIdAndUpdate(
+    const student = await StudentModel.findByIdAndUpdate(
       sid,
       { isDeleted: true },
       { new: true }

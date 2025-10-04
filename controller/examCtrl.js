@@ -3,6 +3,8 @@ const ExamModel = require("../model/examModel");
 const QuestionModel = require("../model/questionModel");
 const ResultModel = require("../model/resultModel");
 const Counter = require("../model/counterModel");
+const InstructorModel = require("../model/instructorModel");
+const InstructorIDModel = require("../model/instructorIDModel");
 
 // helper to generate unique 6 char examID
 const crypto = require("crypto");
@@ -416,24 +418,24 @@ exports.getStudentUpcomingExams = async (req, res) => {
 exports.getInstructorUpcomingExams = async (req, res) => {
   try {
     const now = new Date();
-    const instructorId = req.user?.id; // from authMiddleware
+    const instructorId = req.instructor?.id; // from authMiddleware
+    const instructor = await InstructorModel.findById(
+      { _id: instructorId },
+      { instructorId: 1 }
+    );
+    const iid = await InstructorIDModel.findOne({
+      instructorId: instructor.instructorId,
+    });
+    console.log(iid);
 
     // For public exams: include scheduled (>= now) and unscheduled (no examDate)
     const exams = await ExamModel.find({
       isDeleted: false,
       $or: [
-        {
-          accessability: "public",
-          $or: [
-            { examDate: { $gte: now } },
-            { examDate: { $exists: false } },
-            { examDate: null },
-          ],
-        },
         { accessability: "allInstructors", examDate: { $gte: now } },
         {
           accessability: "instructor",
-          instructorId: instructorId,
+          instructorId: iid._id,
           examDate: { $gte: now },
         },
       ],

@@ -138,7 +138,7 @@ router.post("/instructor/logout", instructorAuth, logoutInstructor);
 router.get("/instructor/profile", instructorAuth, getInstructorProfile);
 router.put("/instructor/profile", instructorAuth, updateInstructorProfile);
 // Admin Instructor APIs
-router.get("/admin/instructors", getAllInstructors);
+router.get("/admin/instructors", authMiddleware, getAllInstructors);
 router.put("/admin/instructor/edit/:iid", authMiddleware, editInstructor);
 router.post("/admin/instructor/generate", authMiddleware, generateInstructorId);
 router.delete("/admin/instructor/soft/:iid", authMiddleware, softDeleteInstructor);
