@@ -265,10 +265,12 @@ exports.getMyResults = async (req, res) => {
   try {
     if (!req.student)
       return res.status(401).json({ message: "Student auth required" });
-    const results = await Result.find({ student: req.student._id }).populate(
-      "exam",
-      "examID examSet examDate kyu totalQuestionCount totalMarks eachQuestionMarks"
-    );
+    const results = await Result.find({ student: req.student._id })
+      .populate(
+        "exam",
+        "examID examSet examDate kyu totalQuestionCount totalMarks eachQuestionMarks"
+      )
+      .sort({ createdAt: -1 });
 
     return res.json(results);
   } catch (error) {
