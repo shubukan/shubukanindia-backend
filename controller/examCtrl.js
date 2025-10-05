@@ -465,6 +465,22 @@ exports.startExam = async (req, res) => {
       return res.status(404).json({ message: "Exam not found" });
     }
 
+    // Ensure password is required for all sets if any set has one
+    const requiresPassword = exams.some(
+      (e) => e.password && e.password.trim() !== ""
+    );
+    if (requiresPassword) {
+      if (!password) {
+        return res.status(403).json({ message: "Password required" });
+      }
+      const match = exams.some(
+        (e) => e.password && e.password.trim() === password.trim()
+      );
+      if (!match) {
+        return res.status(403).json({ message: "Invalid password" });
+      }
+    }
+
     const now = new Date();
 
     // Find live exam:
@@ -472,7 +488,10 @@ exports.startExam = async (req, res) => {
     // - OR public exam with NO examDate: treat as live-on-demand (start now)
     let liveExam = exams.find((e) => {
       // public on-demand (no examDate) -> live
-      if (e.accessability === "public" && (!e.examDate || e.examDate === null)) {
+      if (
+        e.accessability === "public" &&
+        (!e.examDate || e.examDate === null)
+      ) {
         return true;
       }
       if (!e.examDate) return false;
@@ -481,76 +500,66 @@ exports.startExam = async (req, res) => {
       return now >= start && now <= end;
     });
 
-    // If there is a live exam, enforce its password (if any) — check against that set only
-    if (liveExam) {
-      const liveHasPassword = liveExam.password && liveExam.password.trim() !== "";
-      if (liveHasPassword) {
-        if (!password || password.trim() === "") {
-          return res.status(403).json({ message: "Password required" });
-        }
-        if (password.trim() !== liveExam.password.trim()) {
-          return res.status(403).json({ message: "Invalid password" });
-        }
-      }
+    if (!liveExam) {
+      // check if any exam already expired (past its end time)
+      const expiredExam = exams.find((e) => {
+        if (!e.examDate) return false;
+        return now > new Date(e.examDate).getTime() + e.examDuration * 60000;
+      });
 
-      // Already attempted? — only enforce for non-public exams
-      if (liveExam.accessability !== "public") {
-        const already = await ResultModel.findOne({
-          exam: liveExam._id,
-          student: req.student._id,
+      if (expiredExam) {
+        return res.json({
+          status: "expired",
+          examID: expiredExam.examID,
+          examSet: expiredExam.examSet,
         });
-        if (already) {
-          return res.status(400).json({ message: "Exam already attempted" });
-        }
       }
 
-      // Return the live exam (public on-demand included)
+      // else, it's a future exam (for scheduled sets)
+      const nextExam = exams
+        .filter((e) => e.examDate && new Date(e.examDate) > now)
+        .sort((a, b) => new Date(a.examDate) - new Date(b.examDate))[0];
+
+      if (!nextExam) {
+        return res
+          .status(404)
+          .json({ message: "No upcoming sets for this examID" });
+      }
+
+      const ms = new Date(nextExam.examDate) - now;
       return res.json({
-        status: "ok",
-        exam: {
-          _id: liveExam._id,
-          examID: liveExam.examID,
-          examSet: liveExam.examSet,
-          examDuration: liveExam.examDuration,
-          questions: liveExam.questions,
-          eachQuestionMarks: liveExam.eachQuestionMarks,
-          totalQuestionCount: liveExam.totalQuestionCount,
-        },
+        status: "waiting",
+        examID: nextExam.examID,
+        examSet: nextExam.examSet,
+        examDate: nextExam.examDate,
+        timeRemains: Math.max(0, Math.floor(ms / 1000)),
       });
     }
 
-    // No live exam found -> handle expired / waiting / no upcoming
-    // check if any exam already expired (past its end time)
-    const expiredExam = exams.find((e) => {
-      if (!e.examDate) return false;
-      const end = new Date(new Date(e.examDate).getTime() + e.examDuration * 60000);
-      return now > end;
-    });
-
-    if (expiredExam) {
-      return res.json({
-        status: "expired",
-        examID: expiredExam.examID,
-        examSet: expiredExam.examSet,
+    // Already attempted? — only enforce for non-public exams
+    if (liveExam.accessability !== "public") {
+      const already = await ResultModel.findOne({
+        exam: liveExam._id,
+        student: req.student._id,
       });
+      if (already) {
+        return res.status(400).json({ message: "Exam already attempted" });
+      }
     }
+    // If exam is public, we allow multiple attempts by the same student.
 
-    // else, it's a future exam (for scheduled sets)
-    const nextExam = exams
-      .filter((e) => e.examDate && new Date(e.examDate) > now)
-      .sort((a, b) => new Date(a.examDate) - new Date(b.examDate))[0];
-
-    if (!nextExam) {
-      return res.status(404).json({ message: "No upcoming sets for this examID" });
-    }
-
-    const ms = new Date(nextExam.examDate) - now;
+    // For public on-demand exam with no examDate, we still return the examDuration and questions
     return res.json({
-      status: "waiting",
-      examID: nextExam.examID,
-      examSet: nextExam.examSet,
-      examDate: nextExam.examDate,
-      timeRemains: Math.max(0, Math.floor(ms / 1000)),
+      status: "ok",
+      exam: {
+        _id: liveExam._id,
+        examID: liveExam.examID,
+        examSet: liveExam.examSet,
+        examDuration: liveExam.examDuration,
+        questions: liveExam.questions,
+        eachQuestionMarks: liveExam.eachQuestionMarks,
+        totalQuestionCount: liveExam.totalQuestionCount,
+      },
     });
   } catch (error) {
     return res.status(500).json({ message: error.message });
