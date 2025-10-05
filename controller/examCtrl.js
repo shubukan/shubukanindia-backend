@@ -530,6 +530,7 @@ exports.startExam = async (req, res) => {
       return res.json({
         status: "waiting",
         examID: nextExam.examID,
+        password: nextExam.password,
         examSet: nextExam.examSet,
         examDate: nextExam.examDate,
         timeRemains: Math.max(0, Math.floor(ms / 1000)),
