@@ -47,4 +47,4 @@ package-lock.json
 
 # Testing
 jest-html-reporters-*.html
-test-results/
+test-results/.env
