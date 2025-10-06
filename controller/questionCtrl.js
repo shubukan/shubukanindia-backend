@@ -6,7 +6,18 @@ const Counter = require("../model/counterModel");
 // View all questions
 exports.getAllQuestions = async (req, res) => {
   try {
-    const questions = await Question.find().select("-__v").sort({ createdAt: -1 });
+    const questions = await Question.find()
+      .select("-__v")
+      .sort({ createdAt: -1 });
+    return res.json(questions);
+  } catch (error) {
+    return res.status(500).json({ message: error.message });
+  }
+};
+
+exports.getQnA = async (req, res) => {
+  try {
+    const questions = await Question.find().select("question options answer");
     return res.json(questions);
   } catch (error) {
     return res.status(500).json({ message: error.message });
@@ -57,8 +68,7 @@ exports.updateQuestion = async (req, res) => {
     const { question, options, answer, questionSet } = req.body;
 
     const q = await Question.findById(id);
-    if (!q)
-      return res.status(404).json({ message: "Question not found" });
+    if (!q) return res.status(404).json({ message: "Question not found" });
 
     // Find non-deleted exams that include this question
     const exams = await Exam.find({
@@ -80,11 +90,9 @@ exports.updateQuestion = async (req, res) => {
           .json({ message: "Cannot edit question used in past exams" });
       }
       if (inFuture) {
-        return res
-          .status(400)
-          .json({
-            message: "Cannot edit question used in upcoming scheduled exams",
-          });
+        return res.status(400).json({
+          message: "Cannot edit question used in upcoming scheduled exams",
+        });
       }
     }
 

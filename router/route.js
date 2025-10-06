@@ -65,7 +65,8 @@ const {
   createQuestion,
   updateQuestion,
   deleteQuestion,
-  getAllQuestions
+  getAllQuestions,
+  getQnA
 } = require("../controller/questionCtrl");
 const {
   createExam,
@@ -164,6 +165,7 @@ router.delete("/admin/student/:sid", authMiddleware, deleteStudent);
 
 // QUESTION routes
 router.get("/admin/questions", authMiddleware, getAllQuestions);
+router.get("/admin/qna", authMiddleware, getQnA);
 router.post("/admin/question", authMiddleware, createQuestion); // admin create
 router.put("/admin/question/:id", authMiddleware, updateQuestion); // admin update
 router.delete("/admin/question/:id", authMiddleware, deleteQuestion); // admin delete
