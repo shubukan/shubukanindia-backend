@@ -33,7 +33,7 @@ exports.getAllExams = async (req, res) => {
           model: "Exam",
           select: "examID examSet accessability examDate isDeleted",
         },
-      });
+      }).sort({ createdAt: -1 });
 
     return res.json(exams);
   } catch (error) {
