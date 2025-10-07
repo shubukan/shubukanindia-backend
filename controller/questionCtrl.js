@@ -3,12 +3,25 @@ const Question = require("../model/questionModel");
 const Exam = require("../model/examModel");
 const Counter = require("../model/counterModel");
 
+// controllers/questionController.js
+exports.deleteAll = async (req, res) => {
+  try {
+    const result = await Question.deleteMany({ questionID: { $gt: 31 } });
+    return res.json({
+      message: "Deleted successfully",
+      deletedCount: result.deletedCount,
+    });
+  } catch (error) {
+    return res.status(500).json({ message: error.message });
+  }
+};
+
 // View all questions
 exports.getAllQuestions = async (req, res) => {
   try {
     const questions = await Question.find()
       .select("-__v")
-      .sort({ createdAt: -1 });
+      .sort({ questionID: -1 });
     return res.json(questions);
   } catch (error) {
     return res.status(500).json({ message: error.message });
@@ -17,7 +30,9 @@ exports.getAllQuestions = async (req, res) => {
 
 exports.getQnA = async (req, res) => {
   try {
-    const questions = await Question.find().select("question options answer");
+    const questions = await Question.find().select(
+      "questionID question options answer"
+    );
     return res.json(questions);
   } catch (error) {
     return res.status(500).json({ message: error.message });
