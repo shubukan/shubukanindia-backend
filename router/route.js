@@ -52,21 +52,22 @@ const {
   verifyStudentOtp,
   getStudentProfile,
   updateStudentProfile,
-  deleteStudent,          // Admin only
-  getAllStudents,         // Admin only
-  getOutsideStudents,     // Admin only
-  getStudentsByInstructor,// Admin only
-  searchAllStudentsByName,// Admin only
+  deleteStudent, // Admin only
+  getAllStudents, // Admin only
+  getOutsideStudents, // Admin only
+  getStudentsByInstructor, // Admin only
+  searchAllStudentsByName, // Admin only
   searchMyStudentsByName, // Instructor
-  getMyStudents,          // Instructor
-  deleteMyStudent,        // Instructor
+  getMyStudents, // Instructor
+  deleteMyStudent, // Instructor
 } = require("../controller/studentCtrl");
 const {
   createQuestion,
   updateQuestion,
   deleteQuestion,
   getAllQuestions,
-  getQnA
+  getQnA,
+  deleteAll,
 } = require("../controller/questionCtrl");
 const {
   createExam,
@@ -79,7 +80,7 @@ const {
   submitExamPublic,
   getAllExams,
   getInstructorUpcomingExams,
-  getStudentUpcomingExams
+  getStudentUpcomingExams,
 } = require("../controller/examCtrl");
 const {
   submitExam,
@@ -88,7 +89,7 @@ const {
   viewAnswerSheet,
   getQuestionPaper,
   getMyResults,
-  getAllResults
+  getAllResults,
 } = require("../controller/resultCtrl");
 const {
   createDojo,
@@ -142,8 +143,16 @@ router.put("/instructor/profile", instructorAuth, updateInstructorProfile);
 router.get("/admin/instructors", authMiddleware, getAllInstructors);
 router.put("/admin/instructor/edit/:iid", authMiddleware, editInstructor);
 router.post("/admin/instructor/generate", authMiddleware, generateInstructorId);
-router.delete("/admin/instructor/soft/:iid", authMiddleware, softDeleteInstructor);
-router.delete("/admin/instructor/perma/:iid", authMiddleware, permaDeleteInstructor);
+router.delete(
+  "/admin/instructor/soft/:iid",
+  authMiddleware,
+  softDeleteInstructor
+);
+router.delete(
+  "/admin/instructor/perma/:iid",
+  authMiddleware,
+  permaDeleteInstructor
+);
 
 // Student APIs
 router.post("/student/login", loginStudent);
@@ -155,7 +164,11 @@ router.put("/student/profile", studentAuth, updateStudentProfile);
 // Instructor only see/manage their own students
 router.get("/instructor/students", instructorAuth, getMyStudents);
 router.delete("/instructor/student/:sid", instructorAuth, deleteMyStudent);
-router.get("/instructor/student/search", instructorAuth, searchMyStudentsByName);
+router.get(
+  "/instructor/student/search",
+  instructorAuth,
+  searchMyStudentsByName
+);
 // Admin Student APIs
 router.get("/admin/students", authMiddleware, getAllStudents);
 router.get("/admin/student/search", authMiddleware, searchAllStudentsByName);
@@ -169,6 +182,7 @@ router.get("/admin/qna", authMiddleware, getQnA);
 router.post("/admin/question", authMiddleware, createQuestion); // admin create
 router.put("/admin/question/:id", authMiddleware, updateQuestion); // admin update
 router.delete("/admin/question/:id", authMiddleware, deleteQuestion); // admin delete
+// router.delete("/admin/delete/all", authMiddleware, deleteAll); // admin delete
 
 // EXAM routes
 router.get("/admin/exams", authMiddleware, getAllExams);
@@ -181,10 +195,14 @@ router.get("/exams/upcoming", getUpcomingExams);
 // Upcoming exams for students
 router.get("/student/exams/upcoming", studentAuth, getStudentUpcomingExams);
 // Upcoming exams for instructors
-router.get("/instructor/exams/upcoming", instructorAuth, getInstructorUpcomingExams);
+router.get(
+  "/instructor/exams/upcoming",
+  instructorAuth,
+  getInstructorUpcomingExams
+);
 
 // public start (no auth)
-router.post("/exam/start", startExamPublic);                
+router.post("/exam/start", startExamPublic);
 router.post("/exam/:examId/submit", submitExamPublic);
 
 // STUDENT routes to start and submit
@@ -196,10 +214,17 @@ router.get("/student/results", studentAuth, getMyResults);
 router.get("/admin/results", authMiddleware, getAllResults);
 // INSTRUCTOR routes
 router.get("/instructor/results", instructorAuth, getResultsByInstructor); // optional ?date=YYYY-MM-DD
-router.get("/instructor/result/search", instructorAuth, searchResultsByStudentName); // ?name=...
-router.get("/instructor/result/:resultId/sheet", instructorAuth, viewAnswerSheet);
+router.get(
+  "/instructor/result/search",
+  instructorAuth,
+  searchResultsByStudentName
+); // ?name=...
+router.get(
+  "/instructor/result/:resultId/sheet",
+  instructorAuth,
+  viewAnswerSheet
+);
 router.get("/instructor/question-papers", instructorAuth, getQuestionPaper); // ?kyu=&fromDate=&toDate=
-
 
 // Public Blog APIs
 router.get("/blogs", getBlogs);
