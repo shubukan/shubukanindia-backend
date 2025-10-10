@@ -3,8 +3,8 @@ const mongoose = require("mongoose");
 const questionSchema = new mongoose.Schema(
   {
     questionID: { type: Number, unique: true, index: true }, // sequential ID
-    question: { type: String, required: true },
-    options: [{ type: String, required: true }],
+    question: { type: String, trim: true, required: true },
+    options: [{ type: String, trim: true, required: true }],
     answer: { type: Number, required: true }, // index of correct option
     questionSet: { type: Number, default: 1 },
     isDeleted: { type: Boolean, default: false },

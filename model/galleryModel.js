@@ -3,6 +3,7 @@ const mongoose = require("mongoose");
 const gallerySchema = new mongoose.Schema({
   image: {
     type: String,
+    trim: true,
     required: true,
   },
   // store the image’s width and height so that in the frontend I can set placeholders with the correct aspect ratio before the image loads.
@@ -16,18 +17,22 @@ const gallerySchema = new mongoose.Schema({
   },
   title: {
     type: String,
+    trim: true,
     required: true,
   },
   description: {
     type: String,
+    trim: true,
     required: true,
   },
   year: {
     type: String,
+    trim: true,
     required: true,
   },
   category: {
     type: String,
+    trim: true,
     required: true,
   },
   tags: {

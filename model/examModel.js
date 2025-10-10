@@ -3,7 +3,7 @@ const mongoose = require("mongoose");
 
 const examSchema = new mongoose.Schema(
   {
-    examID: { type: String, required: true }, // 6-char alphanumeric
+    examID: { type: String, trim: true, required: true }, // 6-char alphanumeric
     examSet: { type: Number, default: 1 },
     password: { type: String }, // optional
     examDuration: { type: Number, required: true }, // minutes
@@ -18,6 +18,7 @@ const examSchema = new mongoose.Schema(
     },
     accessability: {
       type: String,
+      trim: true,
       enum: ["instructor", "allInstructors", "public"],
       required: true,
     },
