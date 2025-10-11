@@ -49,13 +49,32 @@ exports.generateInstructorId = async (req, res) => {
 // For public
 exports.getPublicInstructors = async (req, res) => {
   try {
-    const instructors = await InstructorIDModel.find(
-      { isDeleted: false },
-      { name: 1, identity: 1 } // only return these fields + _id by default
-    );
+    const instructors = await InstructorIDModel.aggregate([
+      { $match: { isDeleted: false } },
+      {
+        $lookup: {
+          from: InstructorModel.collection.name, // ensures correct collection name
+          localField: "instructorId",
+          foreignField: "instructorId",
+          as: "inst"
+        }
+      },
+      { $unwind: { path: "$inst", preserveNullAndEmptyArrays: true } },
+      {
+        $project: {
+          name: 1,
+          identity: 1,
+          // Use Instructor._id (converted to string) if present; otherwise keep the original instructorId string
+          _id: {
+            $ifNull: [{ $toString: "$inst._id" }, "$instructorId"]
+          }
+        }
+      }
+    ]);
 
     return res.json({ instructors });
   } catch (error) {
+    console.error("getPublicInstructors error:", error);
     return res.status(500).json({ message: error.message });
   }
 };

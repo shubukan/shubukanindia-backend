@@ -1,6 +1,7 @@
 // controller/studentCtrl.js
 const StudentModel = require("../model/studentModel");
 const InstructorModel = require("../model/instructorModel");
+const InstructorIDModel = require("../model/instructorIDModel");
 const jwt = require("jsonwebtoken");
 const { sendEmail } = require("../util/sendEmail");
 const {
@@ -218,7 +219,7 @@ exports.updateStudentProfile = async (req, res) => {
 exports.getMyStudents = async (req, res) => {
   try {
     const students = await StudentModel.find({
-      instructorId: req.instructor.instructorId,
+      instructorId: req.instructor._id,
       isDeleted: false,
     });
     return res.json(students);
