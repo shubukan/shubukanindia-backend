@@ -100,7 +100,7 @@ exports.editInstructor = async (req, res) => {
 };
 
 // Admin deletes instructor
-exports.softDeleteInstructor = async (req, res) => {
+exports.softDelInstruct = async (req, res) => {
   try {
     const { iid } = req.params;
     const instructorID = await InstructorIDModel.findOneAndUpdate(
@@ -124,7 +124,7 @@ exports.softDeleteInstructor = async (req, res) => {
 };
 
 // Admin deletes instructor
-exports.permaDeleteInstructor = async (req, res) => {
+exports.permaDelInstruct = async (req, res) => {
   try {
     const { iid } = req.params;
     const deletedID = await InstructorIDModel.findOneAndDelete({

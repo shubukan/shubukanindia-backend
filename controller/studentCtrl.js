@@ -115,10 +115,6 @@ exports.loginStudent = async (req, res) => {
     const student = await StudentModel.findOne({ email, isDeleted: false });
 
     if (!student) return res.status(404).json({ message: "Student not found" });
-    if (!student.isVerified)
-      return res
-        .status(400)
-        .json({ message: "Student not verified. Please signup first." });
 
     // generate OTP and persist
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
@@ -252,7 +248,7 @@ exports.deleteMyStudent = async (req, res) => {
 };
 
 // Instructor: search only among their own students
-exports.searchMyStudentsByName = async (req, res) => {
+exports.searchMyStudents = async (req, res) => {
   try {
     const { name } = req.query;
     if (!name) return res.status(400).json({ message: "Name query required" });
@@ -344,6 +340,55 @@ exports.deleteStudent = async (req, res) => {
     if (!student) return res.status(404).json({ message: "Student not found" });
     return res.json({ message: "Student soft deleted" });
   } catch (error) {
+    return res.status(500).json({ message: error.message });
+  }
+};
+
+// Admin: update student (admin can change name, email, mobile, presentKyu, lastCertificateNum, isVerified, and instructor fields)
+exports.adminUpdateStudent = async (req, res) => {
+  try {
+    const { sid } = req.params;
+    // Only allow these fields to be updated by admin
+    const {
+      name,
+      email,
+      mobile,
+      presentKyu,
+      lastCertificateNum,
+      isVerified,
+      instructorName,
+      instructorIdentity,
+      instructorId,
+    } = req.body;
+
+    // Build update object only with provided fields
+    const updateObj = {};
+    if (typeof name !== "undefined") updateObj.name = name;
+    if (typeof email !== "undefined") updateObj.email = email;
+    if (typeof mobile !== "undefined") updateObj.mobile = mobile;
+    if (typeof presentKyu !== "undefined") updateObj.presentKyu = presentKyu;
+    if (typeof lastCertificateNum !== "undefined")
+      updateObj.lastCertificateNum = lastCertificateNum;
+    if (typeof isVerified !== "undefined") updateObj.isVerified = isVerified;
+    if (typeof instructorName !== "undefined")
+      updateObj.instructorName = instructorName;
+    if (typeof instructorIdentity !== "undefined")
+      updateObj.instructorIdentity = instructorIdentity;
+    if (typeof instructorId !== "undefined") updateObj.instructorId = instructorId;
+
+    const updated = await StudentModel.findByIdAndUpdate(sid, updateObj, {
+      new: true,
+      runValidators: true,
+    }).select("-__v -otp -otpExpiresAt");
+
+    if (!updated) return res.status(404).json({ message: "Student not found" });
+
+    return res.json({ message: "Student updated", student: updated });
+  } catch (error) {
+    // If unique email constraint error
+    if (error.code === 11000 && error.keyPattern && error.keyPattern.email) {
+      return res.status(400).json({ message: "Email already registered" });
+    }
     return res.status(500).json({ message: error.message });
   }
 };
