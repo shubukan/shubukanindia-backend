@@ -294,10 +294,10 @@ exports.loginInstructor = async (req, res) => {
     if (!instructor)
       return res.status(404).json({ message: "Instructor not found" });
 
-    if (!instructor.isVerified)
-      return res
-        .status(400)
-        .json({ message: "Instructor not verified. Please sign up first." });
+    // if (!instructor.isVerified)
+    //   return res
+    //     .status(400)
+    //     .json({ message: "Instructor not verified. Please sign up first." });
 
     // generate OTP and persist
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
