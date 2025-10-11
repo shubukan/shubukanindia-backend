@@ -126,7 +126,7 @@ exports.getResultsByInstructor = async (req, res) => {
 };
 
 // Instructor: search student's results by name (among instructor's students)
-exports.searchResultsByStudentName = async (req, res) => {
+exports.getResultsByStudent = async (req, res) => {
   try {
     if (!req.instructor)
       return res.status(401).json({ message: "Instructor auth required" });

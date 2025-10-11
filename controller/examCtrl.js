@@ -394,7 +394,7 @@ exports.getUpcomingExams = async (req, res) => {
 };
 
 // Upcoming exams for students (only public)
-exports.getStudentUpcomingExams = async (req, res) => {
+exports.getStuUpcomingExams = async (req, res) => {
   try {
     const now = new Date();
     // Include public scheduled exams (examDate >= now) AND public without date
@@ -415,7 +415,7 @@ exports.getStudentUpcomingExams = async (req, res) => {
 };
 
 // Upcoming exams for instructors (public + allInstructors + own exams)
-exports.getInstructorUpcomingExams = async (req, res) => {
+exports.getInsUpcomingExams = async (req, res) => {
   try {
     const now = new Date();
     const instructorId = req.instructor?.id; // from authMiddleware
