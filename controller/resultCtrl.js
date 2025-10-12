@@ -1,13 +1,14 @@
 // controller/resultCtrl.js
-const Result = require("../model/resultModel");
-const Exam = require("../model/examModel");
-const Question = require("../model/questionModel");
-const Student = require("../model/studentModel");
+const ResultModel = require("../model/resultModel");
+const ExamModel = require("../model/examModel");
+const QuestionModel = require("../model/questionModel");
+const StudentModel = require("../model/studentModel");
+const InstructorModel = require("../model/instructorModel");
 
 // Admin View all results
 exports.getAllResults = async (req, res) => {
   try {
-    const results = await Result.find({})
+    const results = await ResultModel.find({})
       .populate("student", "name email instructorId")
       .populate(
         "exam",
@@ -29,12 +30,12 @@ exports.submitExam = async (req, res) => {
     if (!req.student)
       return res.status(401).json({ message: "Student auth required" });
 
-    const exam = await Exam.findById(examId).populate("questions");
+    const exam = await ExamModel.findById(examId).populate("questions");
     if (!exam || exam.isDeleted)
       return res.status(404).json({ message: "Exam not found" });
 
     // check duplicate attempt
-    const already = await Result.findOne({
+    const already = await ResultModel.findOne({
       exam: exam._id,
       student: req.student._id,
     });
@@ -70,7 +71,7 @@ exports.submitExam = async (req, res) => {
     }
 
     // save result
-    const result = await Result.create({
+    const result = await ResultModel.create({
       exam: exam._id,
       student: req.student._id,
       examID: exam.examID,
@@ -99,12 +100,12 @@ exports.getResultsByInstructor = async (req, res) => {
     const examQuery = {
       isDeleted: false,
       $or: [
-        { instructorId: req.instructor.instructorId },
+        { instructorId: req.instructor._id },
         { accessability: "allInstructors" },
         { accessability: "public" },
       ],
     };
-    const exams = await Exam.find(examQuery).select("_id");
+    const exams = await ExamModel.find(examQuery).select("_id");
     const examIds = exams.map((e) => e._id);
 
     const q = { exam: { $in: examIds } };
@@ -116,7 +117,7 @@ exports.getResultsByInstructor = async (req, res) => {
       q.submittedAt = { $gte: from, $lte: to };
     }
 
-    const results = await Result.find(q)
+    const results = await ResultModel.find(q)
       .populate("student", "name email instructorId")
       .populate("exam", "examID examSet examDate kyu");
     return res.json(results);
@@ -134,14 +135,14 @@ exports.getResultsByStudent = async (req, res) => {
     if (!name) return res.status(400).json({ message: "Name query required" });
 
     // find students under instructor
-    const students = await Student.find({
-      instructorId: req.instructor.instructorId,
+    const students = await StudentModel.find({
+      instructorId: req.instructor._id,
       isDeleted: false,
       name: { $regex: name, $options: "i" },
     }).select("_id");
     const studentIds = students.map((s) => s._id);
 
-    const results = await Result.find({
+    const results = await ResultModel.find({
       student: { $in: studentIds },
     }).populate("exam", "examID examSet examDate kyu");
     return res.json(results);
@@ -158,7 +159,7 @@ exports.viewAnswerSheet = async (req, res) => {
       return res.status(401).json({ message: "Instructor auth required" });
     const { resultId } = req.params;
 
-    const result = await Result.findById(resultId)
+    const result = await ResultModel.findById(resultId)
       .populate("exam")
       .populate("student");
     if (!result) return res.status(404).json({ message: "Result not found" });
@@ -166,7 +167,7 @@ exports.viewAnswerSheet = async (req, res) => {
     // check exam belongs to instructor or public/allInstructors
     const exam = result.exam;
     const allowed =
-      exam.instructorId === req.instructor.instructorId ||
+      exam.instructorId === req.instructor._id ||
       exam.accessability === "allInstructors" ||
       exam.accessability === "public";
     if (!allowed)
@@ -180,7 +181,7 @@ exports.viewAnswerSheet = async (req, res) => {
         .status(400)
         .json({ message: "Cannot view answers for upcoming exam" });
 
-    const questions = await Question.find({ _id: { $in: exam.questions } });
+    const questions = await QuestionModel.find({ _id: { $in: exam.questions } });
 
     // map questions in exam order
     const ordered = exam.questions.map((qid) =>
@@ -226,7 +227,7 @@ exports.getQuestionPaper = async (req, res) => {
       isDeleted: false,
       examDate: { $lte: new Date() }, // only previous exams
       $or: [
-        { instructorId: req.instructor.instructorId },
+        { instructorId: req.instructor._id },
         { accessability: "allInstructors" },
         { accessability: "public" },
       ],
@@ -238,7 +239,7 @@ exports.getQuestionPaper = async (req, res) => {
       query.examDate = { $gte: from, $lte: to };
     }
 
-    const exams = await Exam.find(query).populate("questions");
+    const exams = await ExamModel.find(query).populate("questions");
     // structure response: for frontend, include examDate, kyu, examSet, questions + options + correct answer
     const papers = exams.map((e) => ({
       examID: e.examID,
@@ -265,7 +266,7 @@ exports.getMyResults = async (req, res) => {
   try {
     if (!req.student)
       return res.status(401).json({ message: "Student auth required" });
-    const results = await Result.find({ student: req.student._id })
+    const results = await ResultModel.find({ student: req.student._id })
       .populate(
         "exam",
         "examID examSet examDate kyu totalQuestionCount totalMarks eachQuestionMarks"
@@ -277,3 +278,83 @@ exports.getMyResults = async (req, res) => {
     return res.status(500).json({ message: error.message });
   }
 };
+
+exports.getThisStudentResult = async (req, res) => {
+  try {
+    const instructorId = req.instructor._id; // from instructorAuth
+    const { studentId } = req.query;
+
+    if (!studentId)
+      return res.status(400).json({ message: "Student ID is required" });
+
+    // Verify student ownership
+    const student = await StudentModel.findById(studentId);
+    if (!student)
+      return res.status(404).json({ message: "Student not found" });
+
+    if (student.instructorId !== String(instructorId))
+      return res
+        .status(403)
+        .json({ message: "Unauthorized to view this student's results" });
+
+    // Fetch all results of this student
+    const results = await ResultModel.find({ student: studentId })
+      .populate(
+        "exam",
+        "examID examSet examDate kyu totalQuestionCount totalMarks eachQuestionMarks questions"
+      )
+      .sort({ createdAt: -1 });
+
+    // Attach detailed answer sheet
+    const detailedResults = [];
+
+    for (const result of results) {
+      const exam = result.exam;
+      if (!exam) continue;
+
+      // Fetch questions for this exam
+      const questions = await QuestionModel.find({
+        _id: { $in: exam.questions },
+      }).select("question options answer");
+
+      // Merge student's selected options with question data
+      const questionData = questions.map((q, idx) => ({
+        _id: q._id,
+        question: q.question,
+        options: q.options,
+        correctAnswer: q.answer,
+        studentSelected:
+          result.selectedOptions && result.selectedOptions[idx] != null
+            ? result.selectedOptions[idx]
+            : null,
+      }));
+
+      detailedResults.push({
+        _id: result._id,
+        exam: {
+          examID: exam.examID,
+          examSet: exam.examSet,
+          examDate: exam.examDate,
+          kyu: exam.kyu,
+          totalQuestionCount: exam.totalQuestionCount,
+          totalMarks: exam.totalMarks,
+          eachQuestionMarks: exam.eachQuestionMarks,
+          questions: questionData,
+        },
+        marksObtained: result.marksObtained,
+        correctAnsCount: result.correctAnsCount,
+        wrongAnsCount: result.wrongAnsCount,
+        submittedAt: result.submittedAt,
+      });
+    }
+
+    return res.json({
+      studentName: student.name,
+      results: detailedResults,
+    });
+  } catch (error) {
+    console.error("Error fetching student results:", error);
+    return res.status(500).json({ message: error.message });
+  }
+};
+

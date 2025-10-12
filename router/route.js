@@ -91,6 +91,7 @@ const {
   getQuestionPaper,
   getMyResults,
   getAllResults,
+  getThisStudentResult,
 } = require("../controller/resultCtrl");
 const {
   createDojo,
@@ -199,7 +200,8 @@ router.get("/student/results", studentAuth, getMyResults);
 // Admin view result
 router.get("/admin/results", authMiddleware, getAllResults);
 // INSTRUCTOR routes
-router.get("/instructor/results", instructorAuth, getResultsByInstructor); // optional ?date=YYYY-MM-DD
+// router.get("/instructor/results", instructorAuth, getResultsByInstructor); // optional ?date=YYYY-MM-DD
+router.get("/instructor/results", instructorAuth, getThisStudentResult); // optional ?date=YYYY-MM-DD
 router.get("/instructor/result/search", instructorAuth, getResultsByStudent); // ?name=...
 router.get("/instructor/result/:resultId", instructorAuth, viewAnswerSheet);
 router.get("/instructor/question-papers", instructorAuth, getQuestionPaper); // ?kyu=&fromDate=&toDate=
