@@ -181,7 +181,9 @@ exports.viewAnswerSheet = async (req, res) => {
         .status(400)
         .json({ message: "Cannot view answers for upcoming exam" });
 
-    const questions = await QuestionModel.find({ _id: { $in: exam.questions } });
+    const questions = await QuestionModel.find({
+      _id: { $in: exam.questions },
+    });
 
     // map questions in exam order
     const ordered = exam.questions.map((qid) =>
@@ -267,10 +269,10 @@ exports.getMyResults = async (req, res) => {
     if (!req.student)
       return res.status(401).json({ message: "Student auth required" });
     const results = await ResultModel.find({ student: req.student._id })
-      .populate(
-        "exam",
-        "examID examSet examDate kyu totalQuestionCount totalMarks eachQuestionMarks"
-      )
+      // .populate(
+      //   "exam",
+      //   "examID examSet examDate kyu totalQuestionCount totalMarks eachQuestionMarks"
+      // )
       .sort({ createdAt: -1 });
 
     return res.json(results);
@@ -289,8 +291,7 @@ exports.getThisStudentResult = async (req, res) => {
 
     // Verify student ownership
     const student = await StudentModel.findById(studentId);
-    if (!student)
-      return res.status(404).json({ message: "Student not found" });
+    if (!student) return res.status(404).json({ message: "Student not found" });
 
     if (student.instructorId !== String(instructorId))
       return res
@@ -311,14 +312,20 @@ exports.getThisStudentResult = async (req, res) => {
     for (const result of results) {
       const exam = result.exam;
       if (!exam) continue;
+      console.log(exam);
 
       // Fetch questions for this exam
-      const questions = await QuestionModel.find({
-        _id: { $in: exam.questions },
-      }).select("question options answer");
+      const questions = await ExamModel.findById({
+        _id: exam._id,
+      })
+        .populate({
+          path: "questions",
+          select: "-__v -createdAt -updatedAt",
+        })
+        .select("questions");
 
       // Merge student's selected options with question data
-      const questionData = questions.map((q, idx) => ({
+      const questionData = questions.questions.map((q, idx) => ({
         _id: q._id,
         question: q.question,
         options: q.options,
@@ -357,4 +364,3 @@ exports.getThisStudentResult = async (req, res) => {
     return res.status(500).json({ message: error.message });
   }
 };
-
