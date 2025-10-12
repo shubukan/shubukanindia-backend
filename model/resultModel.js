@@ -21,8 +21,4 @@ const resultSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-// Prevent duplicate attempt to same exam for same student at DB level (optional)
-// you can create a unique compound index if you prefer:
-// resultSchema.index({ exam: 1, student: 1 }, { unique: true });
-
 module.exports = mongoose.model("Result", resultSchema);
