@@ -9,23 +9,30 @@ const route = require("./router/route");
 const app = express();
 
 const allowedOrigins = [
-  "http://localhost:3000",       // local dev
-  "https://www.shubukanindia.org" // production frontend
+  "http://localhost:3000", // local dev
+  "https://www.shubukanindia.org", // production frontend
 ];
 
-app.use(cors({
-  origin: function (origin, callback) {
-    if (!origin) return callback(null, true); // allow server-to-server / curl
-    if (allowedOrigins.includes(origin)) {
-      return callback(null, true);
-    } else {
-      return callback(new Error("Not allowed by CORS"));
-    }
-  },
-  credentials: true,
-  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization"]
-}));
+app.use(
+  cors({
+    origin: function (origin, callback) {
+      if (!origin) return callback(null, true); // allow server-to-server / curl
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      } else {
+        return callback(new Error("Not allowed by CORS"));
+      }
+    },
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: [
+      "Content-Type",
+      "Authorization",
+      "x-email",
+      "x-email-token",
+    ],
+  })
+);
 
 // Handle preflight requests globally
 app.options("*", cors());
