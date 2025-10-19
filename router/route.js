@@ -82,6 +82,7 @@ const {
   getAllExams,
   getInsUpcomingExams,
   getStuUpcomingExams,
+  viewAnswerSheets,
 } = require("../controller/examCtrl");
 const {
   submitExam,
@@ -174,7 +175,7 @@ router.post("/admin/question", authMiddleware, createQuestion); // admin create
 router.put("/admin/question/:id", authMiddleware, updateQuestion); // admin update
 router.delete("/admin/question/:id", authMiddleware, deleteQuestion); // admin delete
 // router.delete("/admin/delete/all", authMiddleware, deleteAll); // admin delete
-
+router.get("/instructor/answers", instructorAuth, viewAnswerSheets);
 // EXAM routes
 router.get("/admin/exams", authMiddleware, getAllExams);
 router.post("/admin/exam", authMiddleware, createExam); // admin create exam

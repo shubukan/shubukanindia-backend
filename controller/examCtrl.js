@@ -33,7 +33,8 @@ exports.getAllExams = async (req, res) => {
           model: "Exam",
           select: "examID examSet accessability examDate isDeleted",
         },
-      }).sort({ createdAt: -1 });
+      })
+      .sort({ createdAt: -1 });
 
     return res.json(exams);
   } catch (error) {
@@ -337,6 +338,47 @@ exports.deleteExam = async (req, res) => {
     await exam.save();
     return res.json({ message: "Exam soft deleted" });
   } catch (error) {
+    return res.status(500).json({ message: error.message });
+  }
+};
+
+// For instructor to see answer sheets of previous exams
+exports.viewAnswerSheets = async (req, res) => {
+  try {
+    const instructorId = req.instructor._id;
+    const now = new Date();
+    console.log(instructorId);
+
+    // Only return exams that are completed: examDate + examDuration(minutes) < now
+    const query = {
+      isDeleted: false,
+      $expr: {
+        $lt: [
+          { $add: ["$examDate", { $multiply: ["$examDuration", 60000] }] }, // minutes -> ms
+          now,
+        ],
+      },
+      $or: [
+        { accessability: "allInstructors" },
+        { accessability: "instructor", instructorId: instructorId }, // object fields are ANDed
+      ],
+    };
+
+    const answerSheets = await ExamModel.find(query)
+      .sort({ examDate: -1 })
+      .populate({
+        path: "questions",
+        match: { isDeleted: false },
+        select: "question options answer questionID questionSet",
+      })
+      .lean();
+
+    return res.json({
+      count: answerSheets.length,
+      answerSheets,
+    });
+  } catch (error) {
+    console.error("viewAnswerSheets error:", error);
     return res.status(500).json({ message: error.message });
   }
 };
