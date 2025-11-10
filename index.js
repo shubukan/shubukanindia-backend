@@ -11,6 +11,7 @@ const app = express();
 const allowedOrigins = [
   "http://localhost:3000", // local dev
   "https://www.shubukanindia.org", // production frontend
+  "https://shubukanindia.vercel.app", // test exam app
 ];
 
 app.use(
