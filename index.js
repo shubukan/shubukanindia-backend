@@ -36,7 +36,8 @@ app.use(
 );
 
 // Handle preflight requests globally
-app.options("*", cors());
+// app.options("*", cors()); 
+// deprecated in latest express
 
 app.use(express.json());
 app.use(route);
