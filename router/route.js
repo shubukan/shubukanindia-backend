@@ -94,12 +94,12 @@ const {
   getAllResults,
   getThisStudentResult,
 } = require("../controller/resultCtrl");
-const {
-  createDojo,
-  fetchAllDojo,
-  updateDojo,
-  deleteDojo,
-} = require("../controller/dojoCtrl");
+// const {
+//   createDojo,
+//   fetchAllDojo,
+//   updateDojo,
+//   deleteDojo,
+// } = require("../controller/dojoCtrl");
 const {
   createRegistration,
   getAllRegistrations,
@@ -107,12 +107,12 @@ const {
   updateRegistration,
   deleteRegistration,
 } = require("../controller/registrationCtrl");
-const {
-  createMarksheet,
-  getAMarksheet,
-  getMarksheetSignature,
-  deleteMarksheet,
-} = require("../controller/marksheetCtrl");
+// const {
+//   createMarksheet,
+//   getAMarksheet,
+//   getMarksheetSignature,
+//   deleteMarksheet,
+// } = require("../controller/marksheetCtrl");
 const {
   createAdmin,
   adminLogin,
@@ -238,17 +238,17 @@ router.delete("/gallery/soft/:id", authMiddleware, softDeleteGallery);
 router.delete("/gallery/perma/:id", authMiddleware, permanentDeleteGallery);
 
 // Dojo APIs ---
-router.get("/dojo", fetchAllDojo);
-router.post("/dojo", authMiddleware, createDojo);
-router.put("/dojo/:id", authMiddleware, updateDojo);
-router.delete("/dojo/:id", authMiddleware, deleteDojo);
+// router.get("/dojo", fetchAllDojo);
+// router.post("/dojo", authMiddleware, createDojo);
+// router.put("/dojo/:id", authMiddleware, updateDojo);
+// router.delete("/dojo/:id", authMiddleware, deleteDojo);
 
 // Marksheet APIs ---
-router.post("/marksheet/signature", authMiddleware, getMarksheetSignature);
-router.post("/marksheet", authMiddleware, createMarksheet);
-router.put("/marksheet", authMiddleware, createMarksheet);
-router.get("/marksheet", getAMarksheet);
-router.delete("/marksheet/:id", authMiddleware, deleteMarksheet);
+// router.post("/marksheet/signature", authMiddleware, getMarksheetSignature);
+// router.post("/marksheet", authMiddleware, createMarksheet);
+// router.put("/marksheet", authMiddleware, createMarksheet);
+// router.get("/marksheet", getAMarksheet);
+// router.delete("/marksheet/:id", authMiddleware, deleteMarksheet);
 
 // Registration APIs ---
 router.route("/registration").post(createRegistration).get(getAllRegistrations);
