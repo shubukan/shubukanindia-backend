@@ -147,6 +147,8 @@ exports.createExam = async (req, res) => {
       }
     }
 
+    // examEndTime = new Date(examDate.getTime() - (examDuration*60*1000))
+    const examEndTime = new Date(examDate.getTime() - examDuration * 60 * 1000);
     // compute totals
     const totalQuestionCount = questions.length;
     const totalMarks = totalQuestionCount * eachQuestionMarks;
@@ -157,6 +159,7 @@ exports.createExam = async (req, res) => {
       password,
       examDuration,
       examDate: examDate || undefined,
+      examEndTime,
       accessability,
       instructorId,
       instructorName,

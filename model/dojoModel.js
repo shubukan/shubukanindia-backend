@@ -1,44 +1,76 @@
 // models/dojoModel.js
-const mongoose = require("mongoose");
+import mongoose from "mongoose";
 
-const InstructorSchema = new mongoose.Schema(
+/* --- Contact Schema --- */
+const contactSchema = new mongoose.Schema(
   {
-    name: { type: String, trim: true, required: true },
-    photo: { type: String }, // Cloudinary URL (Shubukan/Dojo)
+    type: {
+      type: String,
+      enum: ["Phone", "Email", "Address"],
+      required: true,
+    },
+    value: {
+      type: String,
+      required: true,
+    },
   },
-  { _id: true }
+  { _id: false }
 );
 
-const BranchSchema = new mongoose.Schema(
+/* --- Branch Schema --- */
+const branchSchema = new mongoose.Schema(
   {
-    mainLocation: { type: String, trim: true, required: true },
-    brunchAddress: [{ type: String, trim: true, required: true }], // keeping your "brunch" key for compatibility
+    mainLocation: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    branchAddresses: {
+      type: [String],
+      required: true,
+    },
   },
-  { _id: true }
+  { _id: false }
 );
 
-const ContactSchema = new mongoose.Schema(
+/* --- Dojo Schema --- */
+const dojoSchema = new mongoose.Schema(
   {
-    label: { type: String, trim: true, required: true }, // e.g. "Phone", "Email", "Address"
-    value: { type: String, trim: true, required: true },
+    dojoName: {
+      type: String,
+      required: true,
+      trim: true,
+      unique: true,
+    },
+
+    dojoType: {
+      type: String,
+      default: "Branch Dojo",
+    },
+
+    instructors: {
+      type: [String],
+      required: true,
+    },
+
+    images: {
+      type: [String],
+      default: [],
+    },
+
+    contacts: {
+      type: [contactSchema],
+      default: [],
+    },
+
+    branches: {
+      type: [branchSchema],
+      required: true,
+    },
   },
-  { _id: true }
+  {
+    timestamps: true,
+  }
 );
 
-const DojoSchema = new mongoose.Schema(
-  {
-    dojoName: { type: String, trim: true, required: true, trim: true },
-    dojoType: { type: String, trim: true, default: "Branch Dojo" },
-    // Store a bcrypt hash, not the raw password:
-    passwordHash: { type: String, trim: true, required: true },
-    // Optional dojo images (if you want a general image gallery for a dojo)
-    image: [{ type: String }], // Cloudinary URLs (Shubukan/Dojo)
-    instructors: [InstructorSchema],
-    contact: [[ContactSchema]], // compatible with your nested array use
-    brunch: [[BranchSchema]], // matches your provided shape
-    isDeleted: { type: Boolean, default: false },
-  },
-  { timestamps: true }
-);
-
-module.exports = mongoose.model("Dojo", DojoSchema);
+module.exports = mongoose.model("Dojo", dojoSchema);
