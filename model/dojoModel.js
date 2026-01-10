@@ -1,5 +1,5 @@
 // models/dojoModel.js
-import mongoose from "mongoose";
+const mongoose = require("mongoose");
 
 /* --- Contact Schema --- */
 const contactSchema = new mongoose.Schema(
