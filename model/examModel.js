@@ -16,6 +16,8 @@ const examSchema = new mongoose.Schema(
         return this.accessability !== "public";
       },
     },
+    // examEndTime = new Date(examDate.getTime() - (examDuration*60*1000))
+    examEndTime: { type: Date },
     accessability: {
       type: String,
       trim: true,
