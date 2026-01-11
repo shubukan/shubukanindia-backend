@@ -269,10 +269,10 @@ exports.getMyResults = async (req, res) => {
     if (!req.student)
       return res.status(401).json({ message: "Student auth required" });
     const results = await ResultModel.find({ student: req.student._id })
-      // .populate(
-      //   "exam",
-      //   "examID examSet examDate kyu totalQuestionCount totalMarks eachQuestionMarks"
-      // )
+      .populate(
+        "exam",
+        "examID examSet examDate kyu totalQuestionCount totalMarks eachQuestionMarks"
+      )
       .sort({ createdAt: -1 });
 
     return res.json(results);
