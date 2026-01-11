@@ -147,8 +147,7 @@ exports.createExam = async (req, res) => {
       }
     }
 
-    // examEndTime = new Date(examDate.getTime() - (examDuration*60*1000))
-    // const examEndTime = new Date(examDate.getTime() - examDuration * 60 * 1000);
+    const examEndTime = new Date(new Date(examDate).getTime() + examDuration * 60 * 1000);
     // compute totals
     const totalQuestionCount = questions.length;
     const totalMarks = totalQuestionCount * eachQuestionMarks;
@@ -159,7 +158,7 @@ exports.createExam = async (req, res) => {
       password,
       examDuration,
       examDate: examDate || undefined,
-      // examEndTime,
+      examEndTime,
       accessability,
       instructorId,
       instructorName,
@@ -251,6 +250,9 @@ exports.updateExam = async (req, res) => {
       return res.status(400).json({ message: "Cannot edit past exams" });
     }
 
+    // update examEndTime regardless
+    exam.examEndTime = new Date(new Date(updates.examDate).getTime() + updates.examDuration * 60 * 1000);
+
     // if questions updated, validate them
     if (updates.questions) {
       const foundCount = await QuestionModel.countDocuments({
@@ -302,6 +304,7 @@ exports.updateExam = async (req, res) => {
       "password",
       "examDuration",
       "examDate",
+      "examEndTime",
       "accessability",
       "instructorId",
       "instructorName",
