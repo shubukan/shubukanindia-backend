@@ -10,3 +10,31 @@ Could not connect to any servers in your MongoDB Atlas cluster. One common reaso
 ---
 
 db.registrations.dropIndex("email_1")
+
+---
+
+The best example of "How to perform arithmetic operations on Data datatype" :
+
+```
+// get a new date
+const newDate = new Date();
+
+// date stored in database in string format
+const stringDate = "2026-01-11T07:12:54.242Z";
+
+// convert to Date datatype
+const realDate = new Date(stringDate);
+
+// getTime() only apply to Date datatype
+const time = realDate.getTime();
+
+const minutes = 15;
+
+// perform arithmetic operations on time
+const finalTime = time + minutes * 60 * 1000;
+
+// convert to Date datatype
+const finalDate = new Date(finalTime);
+
+console.log(finalDate);
+```
