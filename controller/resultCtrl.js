@@ -6,20 +6,225 @@ const StudentModel = require("../model/studentModel");
 const InstructorModel = require("../model/instructorModel");
 
 // Admin View all results
+// exports.getAllResults = async (req, res) => {
+//   try {
+//     const results = await ResultModel.find({})
+//       .populate("student", "name email instructorId")
+//       .populate(
+//         "exam",
+//         "examID examSet examDate kyu totalQuestionCount totalMarks eachQuestionMarks"
+//       );
+
+//     return res.json(results);
+//   } catch (error) {
+//     return res.status(500).json({ message: error.message });
+//   }
+// };
+
+const safeRegex = (s) => {
+  if (!s) return null;
+  // escape regex special chars
+  return new RegExp(String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
+};
+
 exports.getAllResults = async (req, res) => {
   try {
-    const results = await ResultModel.find({})
-      .populate("student", "name email instructorId")
-      .populate(
-        "exam",
-        "examID examSet examDate kyu totalQuestionCount totalMarks eachQuestionMarks"
-      );
+    // Query params
+    const {
+      q, // general search (student name/email or examID)
+      examID,
+      instructorId,
+      from, // ISO date string
+      to,   // ISO date string
+      minMarks,
+      maxMarks,
+      sortBy = "submittedAt",
+      sortDir = "desc",
+      page = 1,
+      limit = 20,
+    } = req.query;
 
-    return res.json(results);
+    const pageNum = Math.max(1, parseInt(page));
+    const pageSize = Math.min(200, parseInt(limit) || 20);
+    const skip = (pageNum - 1) * pageSize;
+
+    // Build match after lookups (so keys are like "student.name" and "exam.examID")
+    const match = {};
+
+    if (q) {
+      const re = safeRegex(q);
+      match.$or = [
+        { "student.name": re },
+        { "student.email": re },
+        { "exam.examID": re },
+      ];
+    }
+    if (examID) match["exam.examID"] = examID;
+    if (instructorId) match["student.instructorId"] = instructorId;
+    if (from || to) {
+      match.submittedAt = {};
+      if (from) match.submittedAt.$gte = new Date(from);
+      if (to) match.submittedAt.$lte = new Date(to);
+    }
+    if (minMarks || maxMarks) {
+      match.marksObtained = {};
+      if (minMarks) match.marksObtained.$gte = Number(minMarks);
+      if (maxMarks) match.marksObtained.$lte = Number(maxMarks);
+    }
+
+    // Sorting
+    const sortDirection = sortDir === "asc" ? 1 : -1;
+    const allowedSortFields = [
+      "submittedAt",
+      "marksObtained",
+      "createdAt",
+      "updatedAt",
+      "exam.examDate",
+      "student.name",
+    ];
+    const sortField = allowedSortFields.includes(sortBy) ? sortBy : "submittedAt";
+
+    // Build aggregation pipeline
+    const pipeline = [
+      // lookup student
+      {
+        $lookup: {
+          from: "students", // collection name (lowercase plural of model)
+          localField: "student",
+          foreignField: "_id",
+          as: "student",
+        },
+      },
+      { $unwind: { path: "$student", preserveNullAndEmptyArrays: true } },
+      // lookup exam
+      {
+        $lookup: {
+          from: "exams",
+          localField: "exam",
+          foreignField: "_id",
+          as: "exam",
+        },
+      },
+      { $unwind: { path: "$exam", preserveNullAndEmptyArrays: true } },
+      // match (on joined fields)
+      { $match: match },
+      // project a handy, small shape for the UI
+      {
+        $project: {
+          exam: {
+            _id: "$exam._id",
+            examID: "$exam.examID",
+            examSet: "$exam.examSet",
+            examDate: "$exam.examDate",
+            totalMarks: "$exam.totalMarks",
+          },
+          student: {
+            _id: "$student._id",
+            name: "$student.name",
+            email: "$student.email",
+            instructorId: "$student.instructorId",
+          },
+          examID: 1,
+          examSet: 1,
+          selectedOptions: 1,
+          marksObtained: 1,
+          correctAnsCount: 1,
+          wrongAnsCount: 1,
+          submittedAt: 1,
+          createdAt: 1,
+          updatedAt: 1,
+        },
+      },
+    ];
+
+    // Normalise sortField path for aggregation sort stage
+    const sortStage = {};
+    // allow nested fields like "exam.examDate" or "student.name"
+    sortStage[sortField] = sortDirection;
+
+    // Use facet for total count + data page
+    pipeline.push({
+      $sort: sortStage,
+    });
+
+    pipeline.push({
+      $facet: {
+        metadata: [{ $count: "total" }],
+        data: [{ $skip: skip }, { $limit: pageSize }],
+      },
+    });
+
+    const aggRes = await ResultModel.aggregate(pipeline).allowDiskUse(true);
+    const metadata = aggRes[0].metadata[0] || { total: 0 };
+    const total = metadata.total;
+    const data = aggRes[0].data;
+
+    return res.json({
+      total,
+      page: pageNum,
+      limit: pageSize,
+      data,
+    });
   } catch (error) {
+    console.error("getAllResults error:", error);
     return res.status(500).json({ message: error.message });
   }
 };
+
+/**
+ * GET /admin/results/summary?groupBy=examID|instructorId|examDate&from=&to=&limit=
+ * returns aggregated counts/averages for admin grouping UI
+ */
+exports.getResultsSummary = async (req, res) => {
+  try {
+    const { groupBy = "examID", from, to, limit = 50 } = req.query;
+    // allowed group keys map to fields after lookup
+    const groupMap = {
+      examID: "$exam.examID",
+      instructorId: "$student.instructorId",
+      examDate: {
+        // group by date (YYYY-MM-DD) so results per-day
+        $dateToString: { format: "%Y-%m-%d", date: "$exam.examDate" },
+      },
+    };
+    if (!groupMap[groupBy]) {
+      return res.status(400).json({ message: "Invalid groupBy" });
+    }
+
+    const match = {};
+    if (from || to) {
+      match.submittedAt = {};
+      if (from) match.submittedAt.$gte = new Date(from);
+      if (to) match.submittedAt.$lte = new Date(to);
+    }
+
+    const pipeline = [
+      { $lookup: { from: "students", localField: "student", foreignField: "_id", as: "student" } },
+      { $unwind: { path: "$student", preserveNullAndEmptyArrays: true } },
+      { $lookup: { from: "exams", localField: "exam", foreignField: "_id", as: "exam" } },
+      { $unwind: { path: "$exam", preserveNullAndEmptyArrays: true } },
+      { $match: match },
+      {
+        $group: {
+          _id: groupMap[groupBy],
+          count: { $sum: 1 },
+          avgMarks: { $avg: "$marksObtained" },
+          maxMarks: { $max: "$marksObtained" },
+          minMarks: { $min: "$marksObtained" },
+        },
+      },
+      { $sort: { count: -1 } },
+      { $limit: Math.min(1000, parseInt(limit) || 50) },
+    ];
+
+    const summary = await ResultModel.aggregate(pipeline).allowDiskUse(true);
+    return res.json({ groupBy, summary });
+  } catch (error) {
+    console.error("getResultsSummary error:", error);
+    return res.status(500).json({ message: error.message });
+  }
+};
+
 
 // Submit exam: compute marks, save result
 exports.submitExam = async (req, res) => {

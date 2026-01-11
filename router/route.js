@@ -92,6 +92,7 @@ const {
   getQuestionPaper,
   getMyResults,
   getAllResults,
+  getResultsSummary,
   getThisStudentResult,
 } = require("../controller/resultCtrl");
 // const {
@@ -199,7 +200,10 @@ router.post("/student/exam/:examId/submit", studentAuth, submitExam);
 
 router.get("/student/results", studentAuth, getMyResults);
 // Admin view result
+// router.get("/admin/results", authMiddleware, getAllResults);
 router.get("/admin/results", authMiddleware, getAllResults);
+router.get("/admin/results/summary", authMiddleware, getResultsSummary);
+
 // INSTRUCTOR routes
 // router.get("/instructor/results", instructorAuth, getResultsByInstructor); // optional ?date=YYYY-MM-DD
 router.get("/instructor/results", instructorAuth, getThisStudentResult); // optional ?date=YYYY-MM-DD
