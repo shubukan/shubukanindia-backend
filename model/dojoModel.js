@@ -11,7 +11,9 @@ const gallerySchema = new mongoose.Schema(
 
 const locationSchema = new mongoose.Schema(
   {
+    dojoName: { type: String, trim: true },
     instructor: { type: String, trim: true },
+    contact: { type: [[String]], default: [] },
     landmark: { type: String, default: "" },
     address: { type: String, default: "" },
   },
