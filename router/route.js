@@ -95,12 +95,13 @@ const {
   getResultsSummary,
   getThisStudentResult,
 } = require("../controller/resultCtrl");
-// const {
-//   createDojo,
-//   fetchAllDojo,
-//   updateDojo,
-//   deleteDojo,
-// } = require("../controller/dojoCtrl");
+const {
+  createDojo,
+  fetchAllDojo,
+  updateDojo,
+  deleteDojo,
+  getCloudDojoSignature,
+} = require("../controller/dojoCtrl");
 const {
   createRegistration,
   getAllRegistrations,
@@ -242,10 +243,11 @@ router.delete("/gallery/soft/:id", authMiddleware, softDeleteGallery);
 router.delete("/gallery/perma/:id", authMiddleware, permanentDeleteGallery);
 
 // Dojo APIs ---
-// router.get("/dojo", fetchAllDojo);
-// router.post("/dojo", authMiddleware, createDojo);
-// router.put("/dojo/:id", authMiddleware, updateDojo);
-// router.delete("/dojo/:id", authMiddleware, deleteDojo);
+router.post("/dojo/signature", authMiddleware, getCloudDojoSignature);
+router.get("/dojo", fetchAllDojo);
+router.post("/dojo", authMiddleware, createDojo);
+router.put("/dojo/:id", authMiddleware, updateDojo);
+router.delete("/dojo/:id", authMiddleware, deleteDojo);
 
 // Marksheet APIs ---
 // router.post("/marksheet/signature", authMiddleware, getMarksheetSignature);

@@ -1,76 +1,76 @@
 // models/dojoModel.js
 const mongoose = require("mongoose");
 
-/* --- Contact Schema --- */
-const contactSchema = new mongoose.Schema(
+const gallerySchema = new mongoose.Schema(
   {
-    type: {
-      type: String,
-      enum: ["Phone", "Email", "Address"],
-      required: true,
-    },
-    value: {
-      type: String,
-      required: true,
-    },
+    url: { type: String, required: true },
+    alt: { type: String, default: "" },
   },
   { _id: false }
 );
 
-/* --- Branch Schema --- */
-const branchSchema = new mongoose.Schema(
+const locationSchema = new mongoose.Schema(
   {
-    mainLocation: {
-      type: String,
-      required: true,
-      trim: true,
-    },
-    branchAddresses: {
-      type: [String],
-      required: true,
-    },
+    dojoName: { type: String, trim: true },
+    instructor: { type: String, trim: true },
+    contact: { type: [[String]], default: [] },
+    landmark: { type: String, default: "" },
+    address: { type: String, default: "" },
   },
   { _id: false }
 );
 
-/* --- Dojo Schema --- */
 const dojoSchema = new mongoose.Schema(
   {
-    dojoName: {
-      type: String,
+    index: {
+      type: Number,
       required: true,
-      trim: true,
       unique: true,
     },
 
     dojoType: {
       type: String,
-      default: "Branch Dojo",
-    },
-
-    instructors: {
-      type: [String],
+      enum: ["main", "sub"],
       required: true,
     },
 
-    images: {
-      type: [String],
-      default: [],
-    },
-
-    contacts: {
-      type: [contactSchema],
-      default: [],
-    },
-
-    branches: {
-      type: [branchSchema],
+    dojoName: {
+      type: String,
       required: true,
+      trim: true,
+    },
+
+    instructor: {
+      type: String,
+      trim: true,
+    },
+
+    profile: { type: String },
+
+    gallery: {
+      type: [gallerySchema],
+      default: [],
+    },
+
+    contact: {
+      type: [[String]], // [["Phone", "123"], ["Email", "abc@x.com"]],
+      default: [],
+    },
+
+    location: {
+      mainLocation: locationSchema,
+      otherLocation: {
+        type: [locationSchema],
+        default: [],
+      },
+    },
+
+    isDeleted: {
+      type: Boolean,
+      default: false,
     },
   },
-  {
-    timestamps: true,
-  }
+  { timestamps: true }
 );
 
 module.exports = mongoose.model("Dojo", dojoSchema);
