@@ -1,74 +1,82 @@
 // models/dojoModel.js
 const mongoose = require("mongoose");
 
-const gallerySchema = new mongoose.Schema(
+const { Schema } = mongoose;
+
+/**
+ * Contact pair - replaces [["Phone","123"], ["xyz","abcd"]] with objects:
+ * { label: "Phone", value: "123" }
+ */
+const contactPairSchema = new Schema(
   {
-    url: { type: String, required: true },
-    alt: { type: String, default: "" },
+    label: { type: String, trim: true, default: "" },
+    value: { type: String, trim: true, default: "" },
   },
   { _id: false }
 );
 
-const locationSchema = new mongoose.Schema(
+/**
+ * Gallery item
+ */
+const galleryItemSchema = new Schema(
   {
-    dojoName: { type: String, trim: true },
-    instructor: { type: String, trim: true },
-    contact: { type: [[String]], default: [] },
-    landmark: { type: String, default: "" },
-    address: { type: String, default: "" },
+    url: { type: String, trim: true },
+    alt: { type: String, default: "dojo image", trim: true },
   },
   { _id: false }
 );
 
-const dojoSchema = new mongoose.Schema(
+/**
+ * Single location entry (used for mainDojo and subDojo arrays)
+ */
+const dojoDetail = new Schema(
   {
-    index: {
-      type: Number,
-      required: true,
-      unique: true,
-    },
+    dojoName: { type: String, trim: true, default: "" },
+    instructor: { type: String, trim: true, default: "" },
+    profileImage: { type: String, trim: true, default: "" },
+    contact: { type: [contactPairSchema], default: [] },
+    landmark: { type: String, trim: true, default: "" },
+    // location can be flexible: [addressLine, city, postalCode] or [lat, lng] depending on your usage
+    location: { type: [String], default: [] },
+  },
+  { _id: false }
+);
 
-    dojoType: {
-      type: String,
-      enum: ["main", "sub"],
-      required: true,
-    },
+/**
+ * Dojo location container - groups main and sub dojos
+ */
+const dojoLocationSchema = new Schema(
+  {
+    mainDojo: { type: [dojoDetail], default: [] },
+    subDojo: { type: [dojoDetail], default: [] },
+  },
+  { _id: false }
+);
 
-    dojoName: {
-      type: String,
-      required: true,
-      trim: true,
-    },
+/**
+ * Root Dojo schema
+ */
+const dojoSchema = new Schema(
+  {
+    index: { type: Number, required: true, unique: true },
+    dojoType: { type: String, trim: true, default: "" },
+    dojoName: { type: String, trim: true, default: "" },
+    instructor: { type: String, trim: true, default: "" },
+    profileImage: { type: String, trim: true, default: "" },
 
-    instructor: {
-      type: String,
-      trim: true,
-    },
+    // contacts at root level (label/value pairs)
+    contact: { type: [contactPairSchema], default: [] },
 
-    profile: { type: String },
+    landmark: { type: String, trim: true, default: "" },
+    location: { type: [String], default: [] },
 
-    gallery: {
-      type: [gallerySchema],
-      default: [],
-    },
+    // gallery of dojo-level images
+    dojoGallery: { type: [galleryItemSchema], default: [] },
 
-    contact: {
-      type: [[String]], // [["Phone", "123"], ["Email", "abc@x.com"]],
-      default: [],
-    },
+    // nested location structure
+    dojoLocation: { type: dojoLocationSchema, default: () => ({}) },
 
-    location: {
-      mainLocation: locationSchema,
-      otherLocation: {
-        type: [locationSchema],
-        default: [],
-      },
-    },
-
-    isDeleted: {
-      type: Boolean,
-      default: false,
-    },
+    isDeleted: { type: Boolean, default: false },
   },
   { timestamps: true }
 );
