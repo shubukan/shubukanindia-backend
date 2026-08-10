@@ -3,10 +3,12 @@ const express = require("express");
 const cors = require("cors");
 const connectDB = require("./db/connection");
 const route = require("./router/route");
+const dns = require("node:dns");
 
 // require("./db/connection")
 
 const app = express();
+dns.setServers(["8.8.8.8", "8.8.4.4"]);
 
 const allowedOrigins = [
   "http://localhost:3000", // local dev
@@ -32,11 +34,11 @@ app.use(
       "x-email",
       "x-email-token",
     ],
-  })
+  }),
 );
 
 // Handle preflight requests globally
-// app.options("*", cors()); 
+// app.options("*", cors());
 // deprecated in latest express
 
 app.use(express.json());

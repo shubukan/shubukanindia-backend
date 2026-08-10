@@ -1,13 +1,9 @@
 // controller/studentCtrl.js
 const StudentModel = require("../model/studentModel");
 const InstructorModel = require("../model/instructorModel");
-const InstructorIDModel = require("../model/instructorIDModel");
 const jwt = require("jsonwebtoken");
 const { sendEmail } = require("../util/sendEmail");
-const {
-  instructorOtpEmailTemplate,
-  studentOtpEmailTemplate,
-} = require("../util/emailTemplate");
+const { studentOtpEmailTemplate } = require("../util/emailTemplate");
 
 // Send OTP helper - persists OTP to student document
 const sendOtp = async (email, subject) => {
@@ -18,7 +14,7 @@ const sendOtp = async (email, subject) => {
   const student = await StudentModel.findOneAndUpdate(
     { email },
     { otp, otpExpiresAt },
-    { new: true }
+    { new: true },
   );
 
   // If student not found here, caller should handle (signup flow creates student first)
@@ -63,7 +59,7 @@ exports.signupStudent = async (req, res) => {
     await sendEmail(
       email,
       "Verify your email - Shubukan India Exam (Student)",
-      studentOtpEmailTemplate(otp)
+      studentOtpEmailTemplate(otp),
     );
 
     return res
@@ -126,7 +122,7 @@ exports.loginStudent = async (req, res) => {
     await sendEmail(
       email,
       "Login OTP - Shubukan India Exam (Student)",
-      studentOtpEmailTemplate(otp)
+      studentOtpEmailTemplate(otp),
     );
     return res.json({ message: "OTP sent to email for login" });
   } catch (error) {
@@ -163,7 +159,7 @@ exports.resendStudentOtp = async (req, res) => {
     await sendEmail(
       email,
       `OTP - Shubukan India Exam (Student - ${type})`,
-      studentOtpEmailTemplate(otp)
+      studentOtpEmailTemplate(otp),
     );
     return res.json({ message: "OTP resent to email" });
   } catch (error) {
@@ -175,7 +171,7 @@ exports.resendStudentOtp = async (req, res) => {
 exports.getStudentProfile = async (req, res) => {
   try {
     const student = await StudentModel.findById(req.student.id).select(
-      "-__v -createdAt -updatedAt -otp -otpExpiresAt"
+      "-__v -createdAt -updatedAt -otp -otpExpiresAt",
     );
     if (!student) return res.status(404).json({ message: "Student not found" });
     return res.json(student);
@@ -205,7 +201,7 @@ exports.updateStudentProfile = async (req, res) => {
         instructorName,
         instructorId,
       },
-      { new: true, runValidators: true }
+      { new: true, runValidators: true },
     ).select("-__v -createdAt -updatedAt -otp -otpExpiresAt");
 
     if (!updated) return res.status(404).json({ message: "Student not found" });
@@ -235,7 +231,7 @@ exports.deleteMyStudent = async (req, res) => {
     const student = await StudentModel.findOneAndUpdate(
       { _id: sid, instructorId: req.instructor.instructorId, isDeleted: false },
       { isDeleted: true },
-      { new: true }
+      { new: true },
     );
 
     if (!student)
@@ -311,7 +307,7 @@ exports.getStudentsByInstructor = async (req, res) => {
 exports.getOutsideStudents = async (req, res) => {
   try {
     const instructors = await InstructorModel.find({ isDeleted: false }).select(
-      "instructorId"
+      "instructorId",
     );
     const instructorIds = instructors.map((i) => i.instructorId);
 
@@ -336,7 +332,7 @@ exports.deleteStudent = async (req, res) => {
     const student = await StudentModel.findByIdAndUpdate(
       sid,
       { isDeleted: true },
-      { new: true }
+      { new: true },
     );
     if (!student) return res.status(404).json({ message: "Student not found" });
     return res.json({ message: "Student soft deleted" });
@@ -375,7 +371,8 @@ exports.adminUpdateStudent = async (req, res) => {
       updateObj.instructorName = instructorName;
     if (typeof instructorIdentity !== "undefined")
       updateObj.instructorIdentity = instructorIdentity;
-    if (typeof instructorId !== "undefined") updateObj.instructorId = instructorId;
+    if (typeof instructorId !== "undefined")
+      updateObj.instructorId = instructorId;
 
     const updated = await StudentModel.findByIdAndUpdate(sid, updateObj, {
       new: true,
