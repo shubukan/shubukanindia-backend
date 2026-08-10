@@ -207,6 +207,105 @@ exports.blogOtpEmailTemplate = (otp) => {
   `;
 };
 
+/* ===== GUARDIAN OTP ===== */
+exports.guardianOtpEmailTemplate = (otp) => {
+  const safeOtp = escapeHtml(otp);
+  return `
+  <!doctype html>
+  <html lang="en">
+  <head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/></head>
+  <body style='${baseStyles}'>
+    <table width="100%" cellpadding="0" cellspacing="0" role="presentation">
+      <tr><td align="center" style="padding:22px 12px;">
+        <table width="600" cellpadding="0" cellspacing="0" role="presentation" style="background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 6px 18px rgba(60,58,54,0.06);">
+          <tr style="background:${COLORS.forest};color:#fff;">
+            <td style="padding:16px 20px;display:flex;gap:12px;align-items:center;">
+              <img src="${logoUrl}" width="48" height="48" alt="Shubukan India" style="border-radius:6px;display:block" />
+              <div>
+                <strong style="display:block;font-size:16px;">Shubukan India</strong>
+                <small style="opacity:0.9;">Guardian verification</small>
+              </div>
+            </td>
+          </tr>
+
+          <tr>
+            <td style="padding:26px 28px;">
+              <h2 style="margin:0 0 8px;color:${COLORS.charcoal};font-size:20px;">Verify your email</h2>
+              <p style="margin:0 0 18px;color:${COLORS.muted};line-height:1.5;">Dear Guardian, use the code below to verify your account. This also ensures you receive evaluation form notifications by email.</p>
+
+              <div style="text-align:center;margin:18px 0;">
+                <div style="display:inline-block;padding:16px 22px;border-radius:10px;background:${COLORS.olive};box-shadow:0 4px 12px rgba(0,0,0,0.06);">
+                  <div style="font-family:'Courier New',monospace;font-size:32px;font-weight:700;color:#fff;letter-spacing:3px;">
+                    ${safeOtp}
+                  </div>
+                </div>
+                <div style="margin-top:10px;font-size:13px;color:${COLORS.muted};">Expires in <strong>5 minutes</strong></div>
+              </div>
+
+              <p style="color:${COLORS.dark};margin-top:8px;">If you did not request this, please ignore this email.</p>
+            </td>
+          </tr>
+
+          <tr style="background:${COLORS.pale};">
+            <td style="padding:14px 20px;text-align:center;color:${COLORS.muted};font-size:13px;">
+              © ${year} Shubukan India
+            </td>
+          </tr>
+        </table>
+      </td></tr>
+    </table>
+  </body>
+  </html>
+  `;
+};
+
+/* ===== EVALUATION WINDOW OPEN NOTIFICATION ===== */
+exports.evaluationWindowEmailTemplate = ({ title, startDate, endDate } = {}) => {
+  const safeTitle = escapeHtml(title || "Guardian Evaluation Form");
+  const start = startDate ? new Date(startDate).toLocaleDateString() : "";
+  const end = endDate ? new Date(endDate).toLocaleDateString() : "";
+  return `
+  <!doctype html>
+  <html lang="en">
+  <head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/></head>
+  <body style='${baseStyles}'>
+    <table width="100%" cellpadding="0" cellspacing="0" role="presentation">
+      <tr><td align="center" style="padding:22px 12px;">
+        <table width="600" cellpadding="0" cellspacing="0" role="presentation" style="background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 6px 18px rgba(60,58,54,0.06);">
+          <tr style="background:${COLORS.accentOrange};color:#fff;">
+            <td style="padding:16px 20px;display:flex;gap:12px;align-items:center;">
+              <img src="${logoUrl}" width="48" height="48" alt="Shubukan India" style="border-radius:6px;display:block" />
+              <div>
+                <strong style="display:block;font-size:16px;">Shubukan India</strong>
+                <small style="opacity:0.9;">Guardian Evaluation Form</small>
+              </div>
+            </td>
+          </tr>
+
+          <tr>
+            <td style="padding:26px 28px;">
+              <h2 style="margin:0 0 8px;color:${COLORS.charcoal};font-size:20px;">${safeTitle} is now open</h2>
+              <p style="margin:0 0 12px;color:${COLORS.muted};line-height:1.5;">
+                The Guardian Evaluation Form is open for submission for your ward(s). Please log in to the portal and complete the form for each of your children.
+              </p>
+              <div style="margin:14px 0;padding:14px 16px;border-radius:8px;background:${COLORS.pale};color:${COLORS.charcoal};font-size:14px;">
+                Submission window: <strong>${start}</strong> to <strong>${end}</strong>
+              </div>
+              <p style="color:${COLORS.dark};margin-top:8px;">Incomplete forms are saved as drafts, but only fully completed and submitted forms count.</p>
+            </td>
+          </tr>
+
+          <tr style="background:${COLORS.warmBeige};color:${COLORS.charcoal};text-align:center;font-size:12px;">
+            <td style="padding:12px 18px;">© ${year} Shubukan India</td>
+          </tr>
+        </table>
+      </td></tr>
+    </table>
+  </body>
+  </html>
+  `;
+};
+
 /* ===== CREATE USER (REGISTRATION CONFIRMATION) ===== */
 exports.createUserEmailTemplate = (name) => {
   const safeName = escapeHtml(name);

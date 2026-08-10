@@ -1,5 +1,4 @@
 // scripts/resetQuestionIDs.js
-require("dotenv").config();
 const mongoose = require("mongoose");
 const Question = require("../model/questionModel");
 const Counter = require("../model/counterModel");

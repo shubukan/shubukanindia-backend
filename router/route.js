@@ -63,6 +63,15 @@ const {
   adminUpdateStudent, // Instructor
 } = require("../controller/studentCtrl");
 const {
+  getCloudKataSignature,
+  createKataUpload,
+  getMyKataUploads,
+  updateKataUpload,
+  deleteKataUpload,
+  getInstructorKataSheet,
+  getAdminKataSheet,
+} = require("../controller/katasheetCtrl");
+const {
   createQuestion,
   updateQuestion,
   deleteQuestion,
@@ -122,10 +131,35 @@ const {
   refreshTokenController,
   adminLogout,
 } = require("../controller/adminCtrl");
+const {
+  signupGuardian,
+  verifyGuardianOtp,
+  resendGuardianOtp,
+  loginGuardian,
+  getGuardianProfile,
+  updateGuardianProfile,
+  getCloudSignatureUploadSignature,
+  getDojoInstructorCards,
+} = require("../controller/guardianCtrl");
+const { addLearner, getMyLearners, deleteLearner } = require("../controller/learnerCtrl");
+const {
+  createEvaluationWindow,
+  getAllEvaluationWindows,
+  closeEvaluationWindowEarly,
+  getActiveWindowsForGuardian,
+  saveDraftForm,
+  finalizeForm,
+  getMyForms,
+  getAllSubmittedForms,
+  getMyInstructorForms,
+  getFormById,
+  downloadFormPdf,
+} = require("../controller/evaluationCtrl");
 const { authMiddleware } = require("../middleware/authMiddleware");
 const { emailAuth } = require("../middleware/emailAuth");
 const { instructorAuth } = require("../middleware/instructorAuth");
 const { studentAuth } = require("../middleware/studentAuth");
+const { guardianAuth } = require("../middleware/guardianAuth");
 
 // Admin APIs ---
 router.post("/admin/login", adminLogin);
@@ -169,6 +203,17 @@ router.get("/admin/student/:iid", authMiddleware, getStudentsByInstructor);
 router.get("/admin/students/outside", authMiddleware, getOutsideStudents);
 router.delete("/admin/student/:sid", authMiddleware, deleteStudent);
 router.put("/admin/student/:sid", authMiddleware, adminUpdateStudent);
+
+// Student APIs (studentAuth required)
+router.post("/kata/signature", getCloudKataSignature)
+router.post("/kata", studentAuth, createKataUpload); // body: { imageUrl, publicId?, caption? }
+router.get("/kata", studentAuth, getMyKataUploads);
+router.put("/kata/:id", studentAuth, updateKataUpload);
+router.delete("/kata/:id", studentAuth, deleteKataUpload);
+// Instructor
+router.get("/instructor/:sid/kata", instructorAuth, getInstructorKataSheet);
+// Admin
+router.get("/admin/:sid/kata", authMiddleware, getAdminKataSheet);
 
 // QUESTION routes
 router.get("/admin/questions", authMiddleware, getAllQuestions);
@@ -264,6 +309,44 @@ router
   .get(getRegistration)
   .put(authMiddleware, updateRegistration)
   .delete(authMiddleware, deleteRegistration);
+
+// Guardian auth APIs ---
+router.post("/guardian/signup", signupGuardian);
+router.post("/guardian/verify-otp", verifyGuardianOtp);
+router.post("/guardian/resend-otp", resendGuardianOtp);
+router.post("/guardian/login", loginGuardian);
+router.get("/guardian/profile", guardianAuth, getGuardianProfile);
+router.put("/guardian/profile", guardianAuth, updateGuardianProfile);
+router.post("/guardian/signature/upload-signature", guardianAuth, getCloudSignatureUploadSignature);
+router.get("/guardian/dojo-instructors", guardianAuth, getDojoInstructorCards);
+
+// Learner APIs (guardian-owned) ---
+router.post("/guardian/learner", guardianAuth, addLearner);
+router.get("/guardian/learner", guardianAuth, getMyLearners);
+router.delete("/guardian/learner/:id", guardianAuth, deleteLearner);
+
+// Evaluation Window APIs (admin schedules the portal) ---
+router.post("/admin/evaluation-window", authMiddleware, createEvaluationWindow);
+router.get("/admin/evaluation-window", authMiddleware, getAllEvaluationWindows);
+router.patch("/admin/evaluation-window/:id/close", authMiddleware, closeEvaluationWindowEarly);
+
+// Guardian: fill the Evaluation Form ---
+router.get("/guardian/evaluation-window/active", guardianAuth, getActiveWindowsForGuardian);
+router.put("/guardian/evaluation-form/:learnerId/:windowId", guardianAuth, saveDraftForm);
+router.post("/guardian/evaluation-form/:learnerId/:windowId/finalize", guardianAuth, finalizeForm);
+router.get("/guardian/evaluation-form", guardianAuth, getMyForms);
+
+// Evaluation Form viewing / downloading (role-based) ---
+router.get("/admin/evaluation-form", authMiddleware, getAllSubmittedForms);
+router.get("/admin/evaluation-form/:id", authMiddleware, getFormById);
+router.get("/admin/evaluation-form/:id/pdf", authMiddleware, downloadFormPdf);
+
+router.get("/instructor/evaluation-form", instructorAuth, getMyInstructorForms);
+router.get("/instructor/evaluation-form/:id", instructorAuth, getFormById);
+router.get("/instructor/evaluation-form/:id/pdf", instructorAuth, downloadFormPdf);
+
+router.get("/guardian/evaluation-form/:id", guardianAuth, getFormById);
+router.get("/guardian/evaluation-form/:id/pdf", guardianAuth, downloadFormPdf);
 
 // Debug API
 router.get("/debug", (_, res) => {
