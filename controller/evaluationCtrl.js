@@ -10,6 +10,21 @@ const { generateEvaluationFormPdf } = require("../util/evaluationPdf");
 
 const EDIT_WINDOW_MS = 5 * 60 * 1000; // 5 minutes
 
+// Select inputs on the frontend send "" before a choice is made. Mongoose enum
+// paths only accept the declared values (plus null), so "" must be normalized
+// to null before it ever reaches a save() call.
+function sanitizeStudentEnums(student) {
+  if (!student) return student;
+  const s = { ...student };
+  if (s.sportPerformance === "") s.sportPerformance = null;
+  if (s.food) s.food = { ...s.food, type: s.food.type === "" ? null : s.food.type };
+  if (s.screenDevice) s.screenDevice = { ...s.screenDevice, mode: s.screenDevice.mode === "" ? null : s.screenDevice.mode };
+  ["karatePractice", "karateNotes", "otherArtsPractice"].forEach((key) => {
+    if (s[key]) s[key] = { ...s[key], mode: s[key].mode === "" ? null : s[key].mode };
+  });
+  return s;
+}
+
 /* ===================== ADMIN: EVALUATION WINDOWS ===================== */
 
 // Admin opens the portal for one or more instructors over a date range
@@ -182,7 +197,7 @@ exports.saveDraftForm = async (req, res) => {
       dojoId: learner.dojoId,
       instructorCode: learner.instructorCode,
     };
-    if (student) update.student = { ...(form ? form.student.toObject() : {}), ...student };
+    if (student) update.student = { ...(form ? form.student.toObject() : {}), ...sanitizeStudentEnums(student) };
     if (teacher) update.teacher = { ...(form ? form.teacher.toObject() : {}), ...teacher };
     if (training) update.training = { ...(form ? form.training.toObject() : {}), ...training };
     if (guardianSignatureUrl !== undefined) update.guardianSignatureUrl = guardianSignatureUrl;
@@ -396,12 +411,13 @@ exports.downloadFormPdf = async (req, res) => {
     if (!form || !allowed) return res.status(404).json({ message: "Form not found" });
 
     const pdfBuffer = await generateEvaluationFormPdf(form);
-    res.setHeader("Content-Type", "application/pdf");
-    res.setHeader(
-      "Content-Disposition",
-      `attachment; filename="evaluation-${form.student?.name || form._id}.pdf"`
-    );
-    return res.send(pdfBuffer);
+    const filename = `evaluation-${form.student?.name || form._id}.pdf`;
+
+    // Respond as JSON (base64), not raw application/pdf bytes. Download-manager
+    // browser extensions (e.g. IDM) intercept responses by Content-Type/MIME
+    // sniffing - a JSON response is invisible to that, so it always reaches our
+    // own JS. The frontend rebuilds the real PDF blob client-side below.
+    return res.json({ success: true, filename, base64: pdfBuffer.toString("base64") });
   } catch (error) {
     return res.status(500).json({ success: false, message: error.message });
   }

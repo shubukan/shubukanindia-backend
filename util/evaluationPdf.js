@@ -1,20 +1,22 @@
 // util/evaluationPdf.js
 //
 // Generates the downloadable Guardian Evaluation Form PDF from a submitted
-// EvaluationForm document. Layout mirrors the sections of the original
-// "Guardian Evaluation Marksheet" template (English labels). The guardian's
-// signature image (uploaded fresh per submission) is stamped on every page;
-// the student's signature (if provided) appears on the final page only.
+// EvaluationForm document. Page breaks mirror the original 7-page
+// "Guardian Evaluation Marksheet" PDF exactly. Each field is rendered with
+// its English label followed by the Bengali translation on the next line.
 //
-// NOTE: The source template is bilingual (English/Bengali). Reproducing the
-// Bengali text requires embedding a Unicode Bengali font (e.g. Noto Sans
-// Bengali .ttf) into this project — none is bundled here, so this generator
-// currently renders English labels only. Drop a .ttf into /assets/fonts and
-// register it below (doc.font(path)) to add Bengali text back in.
+// NOTE on Bengali rendering: pdfkit does not perform full OpenType complex-
+// script shaping (no HarfBuzz), so a handful of Bengali conjunct sequences
+// can throw when drawn. drawBengaliLine() below catches that per-call and
+// simply skips that one line, rather than disabling Bengali for the whole
+// document (which was the original bug here).
 
+const path = require("path");
 const PDFDocument = require("pdfkit");
+const { L } = require("./evaluationFormLabels");
 
-const MARGIN = 50;
+const MARGIN = 46;
+const BENGALI_FONT_PATH = path.join(__dirname, "..", "assets", "fonts", "NotoSansBengali-Regular.ttf");
 
 async function fetchImageBuffer(url) {
   if (!url) return null;
@@ -39,49 +41,83 @@ const timeVal = (entry) => {
   return `${h} hr ${m} min (daily)`;
 };
 
-function drawFooterSignature(doc, guardianSigBuffer, pageLabel) {
-  const bottomY = doc.page.height - MARGIN - 60;
-  doc.fontSize(9).fillColor("#666");
-  if (guardianSigBuffer) {
-    try {
-      doc.image(guardianSigBuffer, doc.page.width - MARGIN - 140, bottomY - 40, {
-        fit: [140, 40],
-      });
-    } catch (e) {
-      // ignore malformed image
-    }
+let bengaliFontLoaded = true;
+
+function registerFonts(doc) {
+  doc.registerFont("EN", "Helvetica");
+  doc.registerFont("EN-Bold", "Helvetica-Bold");
+  try {
+    doc.registerFont("BN", BENGALI_FONT_PATH);
+    bengaliFontLoaded = true;
+  } catch (e) {
+    bengaliFontLoaded = false;
   }
-  doc
-    .moveTo(doc.page.width - MARGIN - 160, bottomY)
-    .lineTo(doc.page.width - MARGIN, bottomY)
-    .strokeColor("#999")
-    .stroke();
-  doc.text("Signature of Guardian", doc.page.width - MARGIN - 160, bottomY + 4, {
-    width: 160,
-    align: "center",
-  });
-  if (pageLabel) {
-    doc.fontSize(8).fillColor("#999").text(pageLabel, MARGIN, doc.page.height - MARGIN - 15);
+}
+
+// Draws one line of Bengali text if possible. If this specific string trips a
+// pdfkit shaping bug, it's skipped silently - it does NOT affect later lines.
+function drawBengaliLine(doc, text, x, y, opts = {}) {
+  if (!bengaliFontLoaded || !text) return;
+  try {
+    doc.font("BN").text(text, x, y, opts);
+  } catch (e) {
+    // Skip just this line; other Bengali text elsewhere is unaffected.
   }
+}
+
+// Draws "English Label: value" then, on the next line, the Bengali label in muted small text.
+function bilingualField(doc, labelKey, valueText, opts = {}) {
+  const label = L[labelKey];
+  if (!label) return;
+  const startX = opts.x ?? MARGIN;
+  const width = opts.width ?? doc.page.width - MARGIN * 2;
+
+  const line = valueText !== undefined && valueText !== null ? `${label.en}:  ${val(valueText)}` : label.en;
+  doc.font("EN-Bold").fontSize(9.5).fillColor("#3C3A36").text(line, startX, doc.y, { width });
+
+  doc.fontSize(8.5).fillColor("#8a8578");
+  drawBengaliLine(doc, label.bn, startX, doc.y, { width });
+  doc.moveDown(0.35);
+}
+
+function sectionHeading(doc, key) {
+  const label = L[key];
+  doc.moveDown(0.4);
+  doc.font("EN-Bold").fontSize(13).fillColor("#A61B1B").text(label.en);
+  doc.fontSize(11).fillColor("#A61B1B");
+  drawBengaliLine(doc, label.bn, MARGIN, doc.y, { width: doc.page.width - MARGIN * 2 });
+  doc.moveTo(MARGIN, doc.y + 2).lineTo(doc.page.width - MARGIN, doc.y + 2).strokeColor("#ddd").stroke();
+  doc.moveDown(0.5);
   doc.fillColor("#000");
 }
 
-function sectionTitle(doc, text) {
-  doc.moveDown(0.8);
-  doc.fontSize(13).fillColor("#B23A48").text(text, { underline: false });
-  doc.moveDown(0.3);
-  doc
-    .moveTo(MARGIN, doc.y)
-    .lineTo(doc.page.width - MARGIN, doc.y)
-    .strokeColor("#ddd")
-    .stroke();
-  doc.moveDown(0.4);
-  doc.fillColor("#000").fontSize(10);
+function instructionLine(doc) {
+  doc.font("EN").fontSize(8.5).fillColor("#777").text(L.yesNoInstruction.en, MARGIN, doc.y, { width: doc.page.width - MARGIN * 2 });
+  doc.fontSize(8).fillColor("#999");
+  drawBengaliLine(doc, L.yesNoInstruction.bn, MARGIN, doc.y, { width: doc.page.width - MARGIN * 2 });
+  doc.moveDown(0.5).fillColor("#000");
 }
 
-function field(doc, label, value) {
-  doc.fontSize(10).fillColor("#444").text(label, { continued: true });
-  doc.fillColor("#000").text(`  ${val(value)}`);
+function drawFooterSignature(doc, guardianSigBuffer) {
+  const bottomY = doc.page.height - MARGIN - 55;
+  if (guardianSigBuffer) {
+    try {
+      doc.image(guardianSigBuffer, doc.page.width - MARGIN - 150, bottomY - 40, { fit: [150, 40] });
+    } catch (e) {
+      /* ignore malformed image */
+    }
+  }
+  const colX = doc.page.width - MARGIN - 170;
+  doc.moveTo(colX, bottomY).lineTo(doc.page.width - MARGIN, bottomY).strokeColor("#999").stroke();
+  doc.font("EN").fontSize(9).fillColor("#666").text(L.guardianSignature.en, colX, bottomY + 4, { width: 170, align: "center" });
+  doc.fontSize(8).fillColor("#999");
+  drawBengaliLine(doc, L.guardianSignature.bn, colX, doc.y, { width: 170, align: "center" });
+  doc.fillColor("#000");
+}
+
+function pageHeader(doc, title) {
+  doc.font("EN-Bold").fontSize(11).fillColor("#3C3A36").text(title, MARGIN, MARGIN - 10, { align: "left" });
+  doc.moveDown(0.6);
 }
 
 function generateEvaluationFormPdf(form) {
@@ -91,158 +127,174 @@ function generateEvaluationFormPdf(form) {
       const studentSig = await fetchImageBuffer(form.studentSignatureUrl);
 
       const doc = new PDFDocument({ size: "A4", margin: MARGIN, bufferPages: true });
+      registerFonts(doc);
+
       const chunks = [];
       doc.on("data", (c) => chunks.push(c));
       doc.on("end", () => resolve(Buffer.concat(chunks)));
       doc.on("error", reject);
 
-      // ---- PAGE 1: Student basics + practice habits ----
-      doc.fontSize(20).fillColor("#3C3A36").text("Guardian Evaluation Marksheet", { align: "center" });
-      doc.moveDown(0.2);
-      doc.fontSize(10).fillColor("#666").text("Shubukan India  |  www.shubukanindia.org", { align: "center" });
-      doc.moveDown(1);
+      const s = form.student || {};
+      const t = form.teacher || {};
+      const tr = form.training || {};
 
-      sectionTitle(doc, "For Students");
-      field(doc, "Student Name:", form.student.name);
-      field(doc, "Age:", form.student.age);
-      field(doc, "Date of Birth:", form.student.dob ? new Date(form.student.dob).toLocaleDateString() : "-");
-      field(doc, "Current Rank:", form.student.currentRank);
-      field(doc, "Instructor:", form.student.instructorName);
-      field(doc, "Dojo:", form.student.dojoName);
-      doc.moveDown(0.3);
-      field(doc, "1. Class:", form.student.classOf);
-      field(doc, "   Board:", form.student.board);
-      field(doc, "2. Study Time (School + Self-study + Tuition):", form.student.studyTime);
-      field(doc, "3. Karate Practice Time (self-study):", timeVal(form.student.karatePractice));
-      field(doc, "4. Karate Notes / Theory Study:", timeVal(form.student.karateNotes));
-      field(doc, "5. Other Arts Practiced:", form.student.otherArtsNames);
-      field(doc, "   Practice Time:", timeVal(form.student.otherArtsPractice));
-      field(doc, "6. Physical Exercise Time:", form.student.physicalExerciseTime);
-      field(
+      /* ================= PAGE 1: Header + Student info + Q1-7 ================= */
+      doc.font("EN-Bold").fontSize(20).fillColor("#3C3A36").text(L.formTitle.en, { align: "center" });
+      doc.fontSize(13).fillColor("#3C3A36");
+      drawBengaliLine(doc, L.formTitle.bn, MARGIN, doc.y, { width: doc.page.width - MARGIN * 2, align: "center" });
+      doc.font("EN").fontSize(9).fillColor("#666").text("Shubukan India  |  www.shubukanindia.org", { align: "center" });
+      doc.moveDown(0.8);
+
+      sectionHeading(doc, "studentSectionTitle");
+      instructionLine(doc);
+
+      bilingualField(doc, "studentName", s.name);
+      bilingualField(doc, "age", s.age);
+      bilingualField(doc, "dob", s.dob ? new Date(s.dob).toLocaleDateString() : null);
+      bilingualField(doc, "currentRank", s.currentRank);
+      bilingualField(doc, "instructor", s.instructorName);
+      bilingualField(doc, "dojo", s.dojoName);
+      bilingualField(doc, "classOf", s.classOf);
+      bilingualField(doc, "board", s.board);
+      bilingualField(doc, "q2", s.studyTime);
+      bilingualField(doc, "q3", timeVal(s.karatePractice));
+      bilingualField(doc, "q4", timeVal(s.karateNotes));
+      bilingualField(doc, "q5", `${val(s.otherArtsNames)} — ${timeVal(s.otherArtsPractice)}`);
+      bilingualField(doc, "q6", s.physicalExerciseTime);
+      bilingualField(
         doc,
-        "7. Uses screen device:",
-        `${yn(form.student.screenDevice?.used)}${
-          form.student.screenDevice?.used
-            ? ` — ${
-                form.student.screenDevice.mode === "onlyIfNecessary"
-                  ? "only if necessary"
-                  : `${val(form.student.screenDevice.hour)} hr ${val(form.student.screenDevice.minute)} min`
-              }`
+        "q7",
+        `${yn(s.screenDevice?.used)}${
+          s.screenDevice?.used
+            ? ` — ${s.screenDevice.mode === "onlyIfNecessary" ? "only if necessary" : `${val(s.screenDevice.hour)} hr ${val(s.screenDevice.minute)} min`}`
             : ""
         }`
       );
-      drawFooterSignature(doc, guardianSig, "Page 1");
+      drawFooterSignature(doc, guardianSig);
 
-      // ---- PAGE 2: Sleep + Food ----
+      /* ================= PAGE 2: Sleep & Food (Q8-11) ================= */
       doc.addPage();
-      sectionTitle(doc, "Sleep & Food");
-      field(doc, "8. Total Sleep Duration:", form.student.sleep?.totalDuration);
-      field(doc, "   Bed Time:", form.student.sleep?.bedTime);
-      field(doc, "   Afternoon Sleep:", form.student.sleep?.afternoonSleep);
-      doc.moveDown(0.3);
-      field(doc, "9. Food:", form.student.food?.type === "veg" ? "Vegetarian" : form.student.food?.type === "nonveg" ? "Non-vegetarian" : "-");
-      doc.moveDown(0.3);
-      doc.fontSize(10).fillColor("#444").text("10. Approx. time of food intake:");
-      field(doc, "   Breakfast:", form.student.food?.times?.breakfast);
-      field(doc, "   Lunch:", form.student.food?.times?.lunch);
-      field(doc, "   Afternoon Snacks:", form.student.food?.times?.afternoonSnacks);
-      field(doc, "   Dinner:", form.student.food?.times?.dinner);
-      const tiffins = form.student.food?.otherTiffinTimes || [];
+      pageHeader(doc, "Guardian Evaluation Marksheet — Sleep & Food");
+      bilingualField(doc, "q8", s.sleep?.totalDuration);
+      bilingualField(doc, "bedTime", s.sleep?.bedTime);
+      bilingualField(doc, "afternoonSleep", s.sleep?.afternoonSleep);
+      bilingualField(doc, "q9", s.food?.type === "veg" ? "Vegetarian" : s.food?.type === "nonveg" ? "Non-vegetarian" : "-");
+      bilingualField(doc, "q10", null);
+      bilingualField(doc, "breakfast", s.food?.times?.breakfast);
+      bilingualField(doc, "lunch", s.food?.times?.lunch);
+      bilingualField(doc, "afternoonSnacks", s.food?.times?.afternoonSnacks);
+      bilingualField(doc, "dinner", s.food?.times?.dinner);
+      const tiffins = s.food?.otherTiffinTimes || [];
       if (tiffins.length) {
-        doc.fontSize(10).fillColor("#444").text("11. Other Tiffin Times:");
-        tiffins.forEach((t) => field(doc, `   No. ${t.no}:`, t.time));
+        bilingualField(doc, "q11", tiffins.map((tf) => `No.${tf.no}: ${tf.time}`).join("  "));
       }
-      if (form.student.food?.remarks) {
-        field(doc, "   Remarks:", form.student.food.remarks);
-      }
-      drawFooterSignature(doc, guardianSig, "Page 2");
+      if (s.food?.remarks) bilingualField(doc, "remarksIfAny", s.food.remarks);
+      drawFooterSignature(doc, guardianSig);
 
-      // ---- PAGE 3: Physical + hobby + remarks ----
+      /* ================= PAGE 3: Physical & Personal (Q12-15) ================= */
       doc.addPage();
-      sectionTitle(doc, "Physical & Personal");
-      field(doc, "12. Height (cm):", form.student.height);
-      field(doc, "    Weight (kg):", form.student.weight);
-      field(doc, "13. Sport Performance:", form.student.sportPerformance);
-      field(doc, "14. Hobby:", form.student.hobby);
-      if (form.student.hobbyRemarks) field(doc, "    Remarks:", form.student.hobbyRemarks);
-      doc.moveDown(0.3);
-      doc.fontSize(10).fillColor("#444").text("15. Remarks on karate learning:");
-      doc.fillColor("#000").text(val(form.student.karateLearningRemarks), { width: 480 });
-      drawFooterSignature(doc, guardianSig, "Page 3");
+      pageHeader(doc, "Guardian Evaluation Marksheet — Physical & Personal");
+      bilingualField(doc, "q12height", s.height);
+      bilingualField(doc, "q12weight", s.weight);
+      bilingualField(doc, "q13", s.sportPerformance);
+      bilingualField(doc, "q14", s.hobby);
+      if (s.hobbyRemarks) bilingualField(doc, "hobbyRemarks", s.hobbyRemarks);
+      bilingualField(doc, "q15", null);
+      doc.font("EN").fontSize(10).fillColor("#000").text(val(s.karateLearningRemarks), { width: 480 });
+      drawFooterSignature(doc, guardianSig);
 
-      // ---- PAGE 4: Teacher evaluation ----
+      /* ================= PAGE 4: For the Teacher ================= */
       doc.addPage();
-      sectionTitle(doc, "For the Teacher");
-      field(doc, "1. Punctual:", yn(form.teacher?.punctual));
-      field(doc, "2. Gives attention to each student:", yn(form.teacher?.attentionToEachStudent));
-      field(doc, "3. Hard working in teaching:", yn(form.teacher?.hardWorking));
-      field(doc, "4. Trains well in:", (form.teacher?.goodTrainingAreas || []).join(", ") || "-");
-      field(doc, "5. Honest in teaching:", yn(form.teacher?.honest));
-      doc.moveDown(0.3);
-      doc.fontSize(10).fillColor("#444").text("6. Remarks about teacher:");
-      doc.fillColor("#000").text(val(form.teacher?.remarks), { width: 480 });
-      drawFooterSignature(doc, guardianSig, "Page 4");
+      pageHeader(doc, "Guardian Evaluation Marksheet — For the Teacher");
+      sectionHeading(doc, "teacherSectionTitle");
+      instructionLine(doc);
+      bilingualField(doc, "t1", yn(t.punctual));
+      bilingualField(doc, "t2", yn(t.attentionToEachStudent));
+      bilingualField(doc, "t3", yn(t.hardWorking));
+      bilingualField(doc, "t4", (t.goodTrainingAreas || []).join(", ") || "-");
+      bilingualField(doc, "t5", yn(t.honest));
+      bilingualField(doc, "t6", null);
+      doc.font("EN").fontSize(10).fillColor("#000").text(val(t.remarks), { width: 480 });
+      drawFooterSignature(doc, guardianSig);
 
-      // ---- PAGE 5: Training preferences ----
+      /* ================= PAGE 5: About Training — Q1, Q2 ================= */
       doc.addPage();
-      sectionTitle(doc, "About Training");
-      field(doc, "1. Training needed:", (form.training?.trainingNeeded || []).join(", ") || "-");
-      doc.moveDown(0.3);
-      field(doc, "2i. Studied sport karate before:", yn(form.training?.studiedSportKarateBefore?.answer));
-      if (form.training?.studiedSportKarateBefore?.answer) {
-        field(doc, "    Style:", form.training.studiedSportKarateBefore.styleName);
-        field(doc, "    Coach:", form.training.studiedSportKarateBefore.coachName);
-        field(doc, "    Years:", form.training.studiedSportKarateBefore.yearsLearnt);
+      pageHeader(doc, "Guardian Evaluation Marksheet — About Training");
+      sectionHeading(doc, "trainingSectionTitle");
+      instructionLine(doc);
+      bilingualField(doc, "tr1", (tr.trainingNeeded || []).join(", ") || "-");
+      bilingualField(doc, "tr2i", yn(tr.studiedSportKarateBefore?.answer));
+      if (tr.studiedSportKarateBefore?.answer) {
+        bilingualField(doc, "styleName", tr.studiedSportKarateBefore.styleName);
+        bilingualField(doc, "coachName", tr.studiedSportKarateBefore.coachName);
+        bilingualField(doc, "yearsLearnt", tr.studiedSportKarateBefore.yearsLearnt);
       }
-      field(doc, "2ii. New in Traditional Full Contact Karate:", yn(form.training?.newInTraditionalFullContact));
-      field(doc, "2iii. Practiced other martial arts:", yn(form.training?.otherMartialArts?.answer));
-      if (form.training?.otherMartialArts?.answer) {
-        field(doc, "    Style:", form.training.otherMartialArts.styleName);
-        field(doc, "    Coach:", form.training.otherMartialArts.coachName);
-        field(doc, "    Years:", form.training.otherMartialArts.yearsLearnt);
+      bilingualField(doc, "tr2ii", yn(tr.newInTraditionalFullContact));
+      bilingualField(doc, "tr2iii", yn(tr.otherMartialArts?.answer));
+      if (tr.otherMartialArts?.answer) {
+        bilingualField(doc, "styleName", tr.otherMartialArts.styleName);
+        bilingualField(doc, "coachName", tr.otherMartialArts.coachName);
+        bilingualField(doc, "yearsLearnt", tr.otherMartialArts.yearsLearnt);
       }
-      drawFooterSignature(doc, guardianSig, "Page 5");
+      drawFooterSignature(doc, guardianSig);
 
-      // ---- PAGE 6: Preferences + final signatures ----
+      /* ================= PAGE 6: About Training — Q3, Q4 ================= */
       doc.addPage();
-      sectionTitle(doc, "Training Preferences (continued)");
-      field(doc, "3. Prefers scientific, effective lessons:", yn(form.training?.preferScientificEffectiveLesson));
-      if (form.training?.preferScientificEffectiveLesson === false) {
-        field(doc, "   Suggestion:", form.training.preferScientificSuggestion);
+      pageHeader(doc, "Guardian Evaluation Marksheet — Training Preferences");
+      bilingualField(doc, "tr3", yn(tr.preferScientificEffectiveLesson));
+      if (tr.preferScientificEffectiveLesson === false) {
+        bilingualField(doc, "suggestIfNo", tr.preferScientificSuggestion);
       }
-      field(doc, "4. Wants fitness-only programme:", yn(form.training?.preferOnlyFitness));
-      if (form.training?.preferOnlyFitness === true) {
-        field(doc, "   Suggestion:", form.training.preferOnlyFitnessSuggestion);
+      bilingualField(doc, "tr4", yn(tr.preferOnlyFitness));
+      if (tr.preferOnlyFitness === true) {
+        bilingualField(doc, "suggestIfYes", tr.preferOnlyFitnessSuggestion);
       }
-      field(doc, "5. Only needs belt & certificate:", yn(form.training?.onlyNeedBeltCertificate));
-      if (form.training?.onlyNeedBeltCertificate === false) {
-        field(doc, "   Suggestion:", form.training.onlyNeedBeltCertificateSuggestion);
-      }
-      doc.moveDown(0.3);
-      doc.fontSize(10).fillColor("#444").text("6. Remarks and suggestion:");
-      doc.fillColor("#000").text(val(form.training?.remarksAndSuggestion), { width: 480 });
+      drawFooterSignature(doc, guardianSig);
 
-      doc.moveDown(2);
+      /* ================= PAGE 7: About Training — Q5, Q6 + final signatures ================= */
+      doc.addPage();
+      pageHeader(doc, "Guardian Evaluation Marksheet — Final");
+      bilingualField(doc, "tr5", yn(tr.onlyNeedBeltCertificate));
+      if (tr.onlyNeedBeltCertificate === false) {
+        bilingualField(doc, "suggestIfNo", tr.onlyNeedBeltCertificateSuggestion);
+      }
+      bilingualField(doc, "tr6", null);
+      doc.font("EN").fontSize(10).fillColor("#000").text(val(tr.remarksAndSuggestion), { width: 480 });
+
+      doc.moveDown(2.5);
       const sigY = doc.y;
+      const colWidth = (doc.page.width - MARGIN * 2 - 20) / 2;
+
       if (studentSig) {
         try {
-          doc.image(studentSig, MARGIN, sigY, { fit: [140, 40] });
-        } catch (e) {}
+          doc.image(studentSig, MARGIN, sigY, { fit: [colWidth, 40] });
+        } catch (e) {
+          /* ignore */
+        }
       }
-      doc
-        .moveTo(MARGIN, sigY + 45)
-        .lineTo(MARGIN + 160, sigY + 45)
-        .strokeColor("#999")
-        .stroke();
-      doc.fontSize(9).fillColor("#666").text("Signature of Student", MARGIN, sigY + 48, { width: 160, align: "center" });
+      doc.moveTo(MARGIN, sigY + 45).lineTo(MARGIN + colWidth, sigY + 45).strokeColor("#999").stroke();
+      doc.font("EN").fontSize(9).fillColor("#666").text(L.studentSignature.en, MARGIN, sigY + 48, { width: colWidth, align: "center" });
+      doc.fontSize(8).fillColor("#999");
+      drawBengaliLine(doc, L.studentSignature.bn, MARGIN, doc.y, { width: colWidth, align: "center" });
 
-      doc.fontSize(9).fillColor("#666").text(
-        `Submitted on: ${form.submittedAt ? new Date(form.submittedAt).toLocaleString() : "-"}`,
-        MARGIN,
-        sigY + 70
+      const guardianColX = MARGIN + colWidth + 20;
+      if (guardianSig) {
+        try {
+          doc.image(guardianSig, guardianColX, sigY, { fit: [colWidth, 40] });
+        } catch (e) {
+          /* ignore */
+        }
+      }
+      doc.moveTo(guardianColX, sigY + 45).lineTo(guardianColX + colWidth, sigY + 45).strokeColor("#999").stroke();
+      doc.font("EN").fontSize(9).fillColor("#666").text(L.guardianSignature.en, guardianColX, sigY + 48, { width: colWidth, align: "center" });
+      doc.fontSize(8).fillColor("#999");
+      drawBengaliLine(doc, L.guardianSignature.bn, guardianColX, doc.y, { width: colWidth, align: "center" });
+
+      doc.moveDown(2);
+      doc.font("EN").fontSize(9).fillColor("#666").text(
+        `${L.date.en}: ${form.submittedAt ? new Date(form.submittedAt).toLocaleDateString() : "-"}`,
+        MARGIN
       );
-
-      drawFooterSignature(doc, guardianSig, "Page 6");
 
       doc.end();
     } catch (error) {
