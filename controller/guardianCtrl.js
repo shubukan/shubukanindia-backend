@@ -2,8 +2,6 @@
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const GuardianModel = require("../model/guardianModel");
-const DojoModel = require("../model/dojoModel");
-const InstructorIDModel = require("../model/instructorIDModel");
 const cloudinary = require("../config/cloudinary");
 const { sendEmail } = require("../util/sendEmail");
 const { guardianOtpEmailTemplate } = require("../util/emailTemplate");
@@ -171,61 +169,3 @@ exports.getCloudSignatureUploadSignature = async (req, res) => {
   }
 };
 
-// Build dojo + instructor "cards" for the Add Learner modal.
-// Flattens root dojo + mainDojo[] + subDojo[] entries, and resolves each instructor
-// name against InstructorIDModel to attach a stable instructorCode where possible.
-exports.getDojoInstructorCards = async (req, res) => {
-  try {
-    const dojos = await DojoModel.find({ isDeleted: false }).sort({ index: 1 }).lean();
-    const instructorIds = await InstructorIDModel.find({ isDeleted: false }).lean();
-
-    const nameToCode = new Map();
-    instructorIds.forEach((i) => {
-      if (i.name) nameToCode.set(i.name.trim().toLowerCase(), i.instructorId);
-    });
-
-    const resolveCode = (name) => {
-      if (!name) return null;
-      return nameToCode.get(name.trim().toLowerCase()) || null;
-    };
-
-    const cards = [];
-    dojos.forEach((dojo) => {
-      if (dojo.dojoName && dojo.instructor) {
-        cards.push({
-          dojoId: dojo._id,
-          dojoName: dojo.dojoName,
-          instructorName: dojo.instructor,
-          instructorCode: resolveCode(dojo.instructor),
-          profileImage: dojo.profileImage || "",
-        });
-      }
-      (dojo.dojoLocation?.mainDojo || []).forEach((d) => {
-        if (d.dojoName && d.instructor) {
-          cards.push({
-            dojoId: dojo._id,
-            dojoName: d.dojoName,
-            instructorName: d.instructor,
-            instructorCode: resolveCode(d.instructor),
-            profileImage: d.profileImage || "",
-          });
-        }
-      });
-      (dojo.dojoLocation?.subDojo || []).forEach((d) => {
-        if (d.dojoName && d.instructor) {
-          cards.push({
-            dojoId: dojo._id,
-            dojoName: d.dojoName,
-            instructorName: d.instructor,
-            instructorCode: resolveCode(d.instructor),
-            profileImage: d.profileImage || "",
-          });
-        }
-      });
-    });
-
-    return res.json({ success: true, count: cards.length, data: cards });
-  } catch (error) {
-    return res.status(500).json({ success: false, message: error.message });
-  }
-};

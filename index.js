@@ -11,7 +11,8 @@ const app = express();
 dns.setServers(["8.8.8.8", "8.8.4.4"]);
 
 const allowedOrigins = [
-  "http://localhost:3000", // local dev
+  "http://localhost:3000", // local dev (Next.js default)
+  "http://localhost:1234", // local dev (alt port)
   "https://www.shubukanindia.org", // production frontend
   "https://shubukanindia.vercel.app", // test exam app
 ];
@@ -20,11 +21,11 @@ app.use(
   cors({
     origin: function (origin, callback) {
       if (!origin) return callback(null, true); // allow server-to-server / curl
-      if (allowedOrigins.includes(origin)) {
+      // Allow any localhost port during local dev, since it changes between setups
+      if (allowedOrigins.includes(origin) || /^http:\/\/localhost:\d+$/.test(origin)) {
         return callback(null, true);
-      } else {
-        return callback(new Error("Not allowed by CORS"));
       }
+      return callback(new Error("Not allowed by CORS"));
     },
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],

@@ -5,11 +5,12 @@ const InstructorIDModel = require("../model/instructorIDModel");
 const EvaluationWindowModel = require("../model/evaluationWindowModel");
 const { sendEmail } = require("../util/sendEmail");
 const { evaluationWindowEmailTemplate } = require("../util/emailTemplate");
+const { resolveInstructorCode } = require("../util/instructorMatch");
 
 // Guardian adds a learner by picking a dojo+instructor card and giving a name
 exports.addLearner = async (req, res) => {
   try {
-    const { name, dojoId, dojoName, instructorName } = req.body;
+    const { name, dojoId, dojoName, instructorName, instructorCode } = req.body;
     if (!name || !dojoId || !dojoName || !instructorName) {
       return res.status(400).json({ message: "name, dojoId, dojoName and instructorName are required" });
     }
@@ -17,10 +18,16 @@ exports.addLearner = async (req, res) => {
     const dojo = await DojoModel.findOne({ _id: dojoId, isDeleted: false });
     if (!dojo) return res.status(404).json({ message: "Dojo not found" });
 
-    const matchedInstructor = await InstructorIDModel.findOne({
-      isDeleted: false,
-      name: { $regex: `^${instructorName.trim()}$`, $options: "i" },
-    });
+    const instructorIdDocs = await InstructorIDModel.find({ isDeleted: false }).lean();
+
+    // Trust a client-supplied code only if it's a real, currently valid instructor code
+    // (the directory API already resolves this correctly, so this is just a fast path).
+    let resolvedCode = null;
+    if (instructorCode && instructorIdDocs.some((i) => i.instructorId === instructorCode)) {
+      resolvedCode = instructorCode;
+    } else {
+      resolvedCode = resolveInstructorCode(instructorName, instructorIdDocs);
+    }
 
     const learner = await LearnerModel.create({
       guardianId: req.guardian._id,
@@ -28,7 +35,7 @@ exports.addLearner = async (req, res) => {
       dojoId,
       dojoName,
       instructorName,
-      instructorCode: matchedInstructor ? matchedInstructor.instructorId : null,
+      instructorCode: resolvedCode,
     });
 
     // If an active window already covers this instructor, notify the guardian right away
