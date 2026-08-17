@@ -2,13 +2,13 @@
 const mongoose = require("mongoose");
 const { Schema } = mongoose;
 
-// A "daily or before-exam" time entry pattern repeats several times in the PDF
-// (Karate practice, karate notes/theory, other arts practice)
+// A "daily / weekly / monthly / before-exam" time entry pattern repeats
+// several times in the PDF (Karate practice, karate notes/theory, other
+// arts practice). Duration is a single free-text field (e.g. "1 hr 30 min").
 const dailyOrBeforeExamSchema = new Schema(
   {
-    mode: { type: String, enum: ["daily", "beforeExam"], default: null },
-    hour: { type: Number, default: null },
-    minute: { type: Number, default: null },
+    mode: { type: String, enum: ["daily", "weekly", "monthly", "beforeExam"], default: null },
+    duration: { type: String, default: "" },
   },
   { _id: false }
 );
@@ -25,7 +25,7 @@ const foodTimeSchema = new Schema(
 
 const tiffinTimeSchema = new Schema(
   {
-    no: { type: Number, required: true }, // 1 or 2
+    no: { type: String, required: true }, // "1" or "2"
     time: { type: String, default: "" },
   },
   { _id: false }
@@ -55,7 +55,7 @@ const evaluationFormSchema = new Schema(
     // ===== FOR STUDENTS (guardian-filled) =====
     student: {
       name: { type: String, default: "" },
-      age: { type: Number, default: null },
+      age: { type: String, default: "" },
       dob: { type: Date, default: null },
       currentRank: { type: String, default: "" },
       instructorName: { type: String, default: "" }, // snapshot
@@ -76,8 +76,7 @@ const evaluationFormSchema = new Schema(
       screenDevice: {
         used: { type: Boolean, default: null },
         mode: { type: String, enum: ["daily", "onlyIfNecessary", null], default: null },
-        hour: { type: Number, default: null },
-        minute: { type: Number, default: null },
+        duration: { type: String, default: "" },
       },
 
       sleep: {
@@ -93,8 +92,8 @@ const evaluationFormSchema = new Schema(
         remarks: { type: String, default: "" },
       },
 
-      height: { type: Number, default: null }, // cm
-      weight: { type: Number, default: null }, // kg
+      height: { type: String, default: "" }, // cm
+      weight: { type: String, default: "" }, // kg
       sportPerformance: {
         type: String,
         enum: ["Bad", "Very bad", "Good", "Very good", "Excellent", null],
@@ -141,11 +140,14 @@ const evaluationFormSchema = new Schema(
       remarksAndSuggestion: { type: String, default: "" },
     },
 
-    // Signature is uploaded fresh per submission and stamped on every page of the generated PDF
+    // Signature is uploaded fresh per submission and stamped on every page of the generated PDF.
+    // Optional — only the guardian signs; there is no student or teacher signature.
     guardianSignatureUrl: { type: String, default: "" },
     guardianSignaturePublicId: { type: String, default: "" },
-    studentSignatureUrl: { type: String, default: "" }, // optional, only used on the final page
-    studentSignaturePublicId: { type: String, default: "" },
+
+    // Mandatory. Printed in place of the signature image on every page of the
+    // generated PDF whenever the guardian hasn't uploaded a signature.
+    filledByName: { type: String, default: "" },
 
     isDeleted: { type: Boolean, default: false },
   },

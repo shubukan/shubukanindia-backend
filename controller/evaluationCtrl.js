@@ -187,8 +187,7 @@ exports.saveDraftForm = async (req, res) => {
       }
     }
 
-    const { student, teacher, training, guardianSignatureUrl, guardianSignaturePublicId, studentSignatureUrl, studentSignaturePublicId } =
-      req.body;
+    const { student, teacher, training, guardianSignatureUrl, guardianSignaturePublicId, filledByName } = req.body;
 
     const update = {
       guardianId: req.guardian._id,
@@ -202,8 +201,7 @@ exports.saveDraftForm = async (req, res) => {
     if (training) update.training = { ...(form ? form.training.toObject() : {}), ...training };
     if (guardianSignatureUrl !== undefined) update.guardianSignatureUrl = guardianSignatureUrl;
     if (guardianSignaturePublicId !== undefined) update.guardianSignaturePublicId = guardianSignaturePublicId;
-    if (studentSignatureUrl !== undefined) update.studentSignatureUrl = studentSignatureUrl;
-    if (studentSignaturePublicId !== undefined) update.studentSignaturePublicId = studentSignaturePublicId;
+    if (filledByName !== undefined) update.filledByName = filledByName;
 
     if (!form) {
       update.status = "draft";
@@ -246,7 +244,7 @@ function findMissingFields(form) {
   if (s.screenDevice?.used) req(s.screenDevice?.mode, "student.screenDevice.mode");
   req(s.sleep?.totalDuration, "student.sleep.totalDuration");
   req(s.sleep?.bedTime, "student.sleep.bedTime");
-  req(s.sleep?.afternoonSleep, "student.sleep.afternoonSleep");
+  // student.sleep.afternoonSleep is optional
   req(s.food?.type, "student.food.type");
   req(s.food?.times?.breakfast, "student.food.times.breakfast");
   req(s.food?.times?.lunch, "student.food.times.lunch");
@@ -301,7 +299,8 @@ function findMissingFields(form) {
   if (tr.onlyNeedBeltCertificate === false) req(tr.onlyNeedBeltCertificateSuggestion, "training.onlyNeedBeltCertificateSuggestion");
   req(tr.remarksAndSuggestion, "training.remarksAndSuggestion");
 
-  req(form.guardianSignatureUrl, "guardianSignatureUrl");
+  // guardianSignatureUrl is optional — not required to finalize
+  req(form.filledByName, "filledByName");
 
   return missing;
 }

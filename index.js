@@ -46,7 +46,7 @@ app.use(express.json());
 app.use(route);
 connectDB();
 
-const PORT = process.env.PORT || 1234;
+const PORT = process.env.PORT || 8080;
 
 app.listen(PORT, () => {
   console.log(`Server Run on ${PORT} ...`);
