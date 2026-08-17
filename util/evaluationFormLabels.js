@@ -66,7 +66,7 @@ const L = {
   tr6: { en: "6. Remarks and suggestion", bn: "৬. মতামত ও প্রস্তাব" },
 
   guardianSignature: { en: "Signature of Guardian", bn: "অভিভাবকের স্বাক্ষর" },
-  studentSignature: { en: "Signature of Student", bn: "ছাত্রের স্বাক্ষর" },
+  filledByName: { en: "This form is filled by (Guardian's Name)", bn: "এই ফর্মটি পূরণ করেছেন (অভিভাবকের নাম)" },
   date: { en: "Date", bn: "তারিখ" },
   yes: { en: "Yes", bn: "হ্যাঁ" },
   no: { en: "No", bn: "না" },

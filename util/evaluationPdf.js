@@ -33,12 +33,12 @@ async function fetchImageBuffer(url) {
 
 const yn = (v) => (v === true ? "Yes" : v === false ? "No" : "-");
 const val = (v, fallback = "-") => (v === null || v === undefined || v === "" ? fallback : String(v));
+const MODE_LABEL = { daily: "Daily", weekly: "Weekly", monthly: "Monthly", beforeExam: "Only before exam" };
 const timeVal = (entry) => {
   if (!entry || !entry.mode) return "-";
   if (entry.mode === "beforeExam") return "Only before exam";
-  const h = entry.hour ?? "-";
-  const m = entry.minute ?? "-";
-  return `${h} hr ${m} min (daily)`;
+  const label = MODE_LABEL[entry.mode] || entry.mode;
+  return entry.duration ? `${label} — ${entry.duration}` : label;
 };
 
 let bengaliFontLoaded = true;
@@ -98,7 +98,9 @@ function instructionLine(doc) {
   doc.moveDown(0.5).fillColor("#000");
 }
 
-function drawFooterSignature(doc, guardianSigBuffer) {
+// `filledByName` is printed in the signature slot whenever no signature image
+// was uploaded, so the form always shows who filled it in even without a scan.
+function drawFooterSignature(doc, guardianSigBuffer, filledByName) {
   const bottomY = doc.page.height - MARGIN - 55;
   if (guardianSigBuffer) {
     try {
@@ -106,6 +108,11 @@ function drawFooterSignature(doc, guardianSigBuffer) {
     } catch (e) {
       /* ignore malformed image */
     }
+  } else if (filledByName) {
+    doc.font("EN-Bold").fontSize(10).fillColor("#3C3A36").text(filledByName, doc.page.width - MARGIN - 170, bottomY - 26, {
+      width: 170,
+      align: "center",
+    });
   }
   const colX = doc.page.width - MARGIN - 170;
   doc.moveTo(colX, bottomY).lineTo(doc.page.width - MARGIN, bottomY).strokeColor("#999").stroke();
@@ -124,7 +131,6 @@ function generateEvaluationFormPdf(form) {
   return new Promise(async (resolve, reject) => {
     try {
       const guardianSig = await fetchImageBuffer(form.guardianSignatureUrl);
-      const studentSig = await fetchImageBuffer(form.studentSignatureUrl);
 
       const doc = new PDFDocument({ size: "A4", margin: MARGIN, bufferPages: true });
       registerFonts(doc);
@@ -166,11 +172,11 @@ function generateEvaluationFormPdf(form) {
         "q7",
         `${yn(s.screenDevice?.used)}${
           s.screenDevice?.used
-            ? ` — ${s.screenDevice.mode === "onlyIfNecessary" ? "only if necessary" : `${val(s.screenDevice.hour)} hr ${val(s.screenDevice.minute)} min`}`
+            ? ` — ${s.screenDevice.mode === "onlyIfNecessary" ? "only if necessary" : val(s.screenDevice.duration)}`
             : ""
         }`
       );
-      drawFooterSignature(doc, guardianSig);
+      drawFooterSignature(doc, guardianSig, form.filledByName);
 
       /* ================= PAGE 2: Sleep & Food (Q8-11) ================= */
       doc.addPage();
@@ -189,7 +195,7 @@ function generateEvaluationFormPdf(form) {
         bilingualField(doc, "q11", tiffins.map((tf) => `No.${tf.no}: ${tf.time}`).join("  "));
       }
       if (s.food?.remarks) bilingualField(doc, "remarksIfAny", s.food.remarks);
-      drawFooterSignature(doc, guardianSig);
+      drawFooterSignature(doc, guardianSig, form.filledByName);
 
       /* ================= PAGE 3: Physical & Personal (Q12-15) ================= */
       doc.addPage();
@@ -201,7 +207,7 @@ function generateEvaluationFormPdf(form) {
       if (s.hobbyRemarks) bilingualField(doc, "hobbyRemarks", s.hobbyRemarks);
       bilingualField(doc, "q15", null);
       doc.font("EN").fontSize(10).fillColor("#000").text(val(s.karateLearningRemarks), { width: 480 });
-      drawFooterSignature(doc, guardianSig);
+      drawFooterSignature(doc, guardianSig, form.filledByName);
 
       /* ================= PAGE 4: For the Teacher ================= */
       doc.addPage();
@@ -215,7 +221,7 @@ function generateEvaluationFormPdf(form) {
       bilingualField(doc, "t5", yn(t.honest));
       bilingualField(doc, "t6", null);
       doc.font("EN").fontSize(10).fillColor("#000").text(val(t.remarks), { width: 480 });
-      drawFooterSignature(doc, guardianSig);
+      drawFooterSignature(doc, guardianSig, form.filledByName);
 
       /* ================= PAGE 5: About Training — Q1, Q2 ================= */
       doc.addPage();
@@ -236,7 +242,7 @@ function generateEvaluationFormPdf(form) {
         bilingualField(doc, "coachName", tr.otherMartialArts.coachName);
         bilingualField(doc, "yearsLearnt", tr.otherMartialArts.yearsLearnt);
       }
-      drawFooterSignature(doc, guardianSig);
+      drawFooterSignature(doc, guardianSig, form.filledByName);
 
       /* ================= PAGE 6: About Training — Q3, Q4 ================= */
       doc.addPage();
@@ -249,7 +255,7 @@ function generateEvaluationFormPdf(form) {
       if (tr.preferOnlyFitness === true) {
         bilingualField(doc, "suggestIfYes", tr.preferOnlyFitnessSuggestion);
       }
-      drawFooterSignature(doc, guardianSig);
+      drawFooterSignature(doc, guardianSig, form.filledByName);
 
       /* ================= PAGE 7: About Training — Q5, Q6 + final signatures ================= */
       doc.addPage();
@@ -261,34 +267,29 @@ function generateEvaluationFormPdf(form) {
       bilingualField(doc, "tr6", null);
       doc.font("EN").fontSize(10).fillColor("#000").text(val(tr.remarksAndSuggestion), { width: 480 });
 
-      doc.moveDown(2.5);
+      doc.moveDown(1.2);
+      bilingualField(doc, "filledByName", form.filledByName);
+
+      doc.moveDown(1.3);
       const sigY = doc.y;
-      const colWidth = (doc.page.width - MARGIN * 2 - 20) / 2;
+      const colWidth = 220;
 
-      if (studentSig) {
-        try {
-          doc.image(studentSig, MARGIN, sigY, { fit: [colWidth, 40] });
-        } catch (e) {
-          /* ignore */
-        }
-      }
-      doc.moveTo(MARGIN, sigY + 45).lineTo(MARGIN + colWidth, sigY + 45).strokeColor("#999").stroke();
-      doc.font("EN").fontSize(9).fillColor("#666").text(L.studentSignature.en, MARGIN, sigY + 48, { width: colWidth, align: "center" });
-      doc.fontSize(8).fillColor("#999");
-      drawBengaliLine(doc, L.studentSignature.bn, MARGIN, doc.y, { width: colWidth, align: "center" });
-
-      const guardianColX = MARGIN + colWidth + 20;
       if (guardianSig) {
         try {
-          doc.image(guardianSig, guardianColX, sigY, { fit: [colWidth, 40] });
+          doc.image(guardianSig, MARGIN, sigY, { fit: [colWidth, 40] });
         } catch (e) {
           /* ignore */
         }
+      } else if (form.filledByName) {
+        doc.font("EN-Bold").fontSize(11).fillColor("#3C3A36").text(form.filledByName, MARGIN, sigY + 10, {
+          width: colWidth,
+          align: "center",
+        });
       }
-      doc.moveTo(guardianColX, sigY + 45).lineTo(guardianColX + colWidth, sigY + 45).strokeColor("#999").stroke();
-      doc.font("EN").fontSize(9).fillColor("#666").text(L.guardianSignature.en, guardianColX, sigY + 48, { width: colWidth, align: "center" });
+      doc.moveTo(MARGIN, sigY + 45).lineTo(MARGIN + colWidth, sigY + 45).strokeColor("#999").stroke();
+      doc.font("EN").fontSize(9).fillColor("#666").text(L.guardianSignature.en, MARGIN, sigY + 48, { width: colWidth, align: "center" });
       doc.fontSize(8).fillColor("#999");
-      drawBengaliLine(doc, L.guardianSignature.bn, guardianColX, doc.y, { width: colWidth, align: "center" });
+      drawBengaliLine(doc, L.guardianSignature.bn, MARGIN, doc.y, { width: colWidth, align: "center" });
 
       doc.moveDown(2);
       doc.font("EN").fontSize(9).fillColor("#666").text(
