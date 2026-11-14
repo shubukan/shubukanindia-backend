@@ -42,8 +42,20 @@ app.use(
 // deprecated in latest express
 
 app.use(express.json());
+
+// Make sure the DB is connected before any route runs (reuses the cached
+// connection on warm instances; answers 503 instead of hanging if Mongo is down).
+app.use(async (req, res, next) => {
+  try {
+    await connectDB();
+    next();
+  } catch (error) {
+    res.status(503).json({ message: "Database unavailable, please try again." });
+  }
+});
+
 app.use(route);
-connectDB();
+connectDB().catch(() => {}); // warm up the connection at cold start
 
 const PORT = process.env.PORT || 8080;
 

@@ -25,9 +25,12 @@ exports.authMiddleware = async (req, res, next) => {
       });
     }
 
-    // Track activity
-    admin.lastActive = new Date();
-    await admin.save();
+    // Track activity - at most one DB write per 15 minutes per admin,
+    // instead of a write on every single admin request.
+    const now = new Date();
+    if (!admin.lastActive || now - admin.lastActive > 15 * 60 * 1000) {
+      AdminModel.updateOne({ _id: admin._id }, { lastActive: now }).catch(() => {});
+    }
 
     req.admin = admin;
     next();

@@ -5,6 +5,7 @@ const router = express.Router();
 const {
   createBlog,
   getBlogs,
+  getAdminBlogs,
   getBlogBySlug,
   getCloudBlogSignature,
   updateBlog,
@@ -214,7 +215,7 @@ router.delete("/admin/student/:sid", authMiddleware, deleteStudent);
 router.put("/admin/student/:sid", authMiddleware, adminUpdateStudent);
 
 // Student APIs (studentAuth required)
-router.post("/kata/signature", getCloudKataSignature)
+router.post("/kata/signature", studentAuth, getCloudKataSignature);
 router.post("/kata", studentAuth, createKataUpload); // body: { imageUrl, publicId?, caption? }
 router.get("/kata", studentAuth, getMyKataUploads);
 router.put("/kata/:id", studentAuth, updateKataUpload);
@@ -282,6 +283,7 @@ router.post("/blog/comment/:slug", emailAuth, addComment);
 router.post("/blog/comment/reply/:slug/:commentId", emailAuth, replyComment);
 
 // Admin Blog APIs
+router.get("/admin/blogs", authMiddleware, getAdminBlogs); // includes drafts
 router.post("/blog/signature", authMiddleware, getCloudBlogSignature);
 router.post("/blog", authMiddleware, createBlog);
 router.put("/blog/:id", authMiddleware, updateBlog);
@@ -320,11 +322,15 @@ router.delete("/admin/banner/:id", authMiddleware, deleteBanner);
 // router.delete("/marksheet/:id", authMiddleware, deleteMarksheet);
 
 // Registration APIs ---
-router.route("/registration").post(createRegistration).get(getAllRegistrations);
+// GET returns personal data (name, phone, email, DOB) - admin only.
+router
+  .route("/registration")
+  .post(createRegistration)
+  .get(authMiddleware, getAllRegistrations);
 
 router
   .route("/registration/:id")
-  .get(getRegistration)
+  .get(authMiddleware, getRegistration)
   .put(authMiddleware, updateRegistration)
   .delete(authMiddleware, deleteRegistration);
 
