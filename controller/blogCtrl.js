@@ -5,7 +5,8 @@ const BlogView = require("../model/blogViewModel");
 const crypto = require("crypto");
 const { sendEmail } = require("../util/sendEmail");
 const { blogOtpEmailTemplate } = require("../util/emailTemplate");
-const { addVerifiedUser } = require("../middleware/emailAuth");
+const { createEmailSession, hashValue } = require("../middleware/emailAuth");
+const { EmailOtp } = require("../model/emailAuthModel");
 const cloudinary = require("../config/cloudinary");
 
 exports.getCloudBlogSignature = async (req, res) => {
@@ -85,40 +86,76 @@ exports.getBlogSlugs = async (req, res) => {
   }
 };
 
-// Get all blogs (with filters, pagination, sorting)
+// Build the shared filter for blog lists
+function buildBlogQuery({ category, tags, search }) {
+  const query = {};
+  if (category) query["category.primary"] = category;
+  if (tags) {
+    const tagArray = Array.isArray(tags) ? tags : String(tags).split(",");
+    query.tags = { $in: tagArray };
+  }
+  if (search) {
+    // escape regex metacharacters so user input can't break / slow the query
+    const safe = String(search).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    query.$or = [
+      { title: { $regex: safe, $options: "i" } },
+      { summary: { $regex: safe, $options: "i" } },
+    ];
+  }
+  return query;
+}
+
+function pageParams(req, defaultLimit) {
+  const page = Math.max(1, parseInt(req.query.page) || 1);
+  const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || defaultLimit));
+  return { page, limit, skip: (page - 1) * limit };
+}
+
+// Public: list published blogs (with filters, pagination, sorting).
+// Always published-only, and without the full article body (`sections`),
+// which list views never use.
 exports.getBlogs = async (req, res) => {
   try {
-    const { category, tags, status, search, page = 1, limit = 10 } = req.query;
-
-    const query = {};
-
-    if (category) query["category.primary"] = category;
-    if (status) query.status = status;
-    if (tags) {
-      const tagArray = Array.isArray(tags) ? tags : tags.split(",");
-      query.tags = { $in: tagArray };
-    }
-    if (search) {
-      query.$or = [
-        { title: { $regex: search, $options: "i" } },
-        { summary: { $regex: search, $options: "i" } },
-      ];
-    }
-
-    const skip = (page - 1) * limit;
+    const query = { ...buildBlogQuery(req.query), status: "published" };
+    const { page, limit, skip } = pageParams(req, 10);
 
     const [blogs, total] = await Promise.all([
       Blog.find(query)
+        .select("-sections")
         .sort({ publishedDate: -1 })
         .skip(skip)
-        .limit(parseInt(limit)),
+        .limit(limit)
+        .lean(),
       Blog.countDocuments(query),
     ]);
 
     return res.json({
       blogs,
       total,
-      currentPage: parseInt(page),
+      currentPage: page,
+      totalPages: Math.ceil(total / limit),
+    });
+  } catch (error) {
+    return res.status(500).json({ message: error.message });
+  }
+};
+
+// Admin: list all blogs including drafts, full documents (used by the editor).
+exports.getAdminBlogs = async (req, res) => {
+  try {
+    const query = buildBlogQuery(req.query);
+    if (req.query.status) query.status = req.query.status;
+    const { page, limit, skip } = pageParams(req, 50);
+
+    const [blogs, total] = await Promise.all([
+      Blog.find(query).sort({ publishedDate: -1 }).skip(skip).limit(limit).lean(),
+      Blog.countDocuments(query),
+    ]);
+
+    return res.json({
+      blogs,
+      total,
+      currentPage: page,
       totalPages: Math.ceil(total / limit),
     });
   } catch (error) {
@@ -130,7 +167,7 @@ exports.getBlogs = async (req, res) => {
 exports.getBlogBySlug = async (req, res) => {
   try {
     const { slug } = req.params;
-    const blog = await Blog.findOne({ slug });
+    const blog = await Blog.findOne({ slug, status: "published" }).lean();
 
     if (!blog) return res.status(404).json({ message: "Blog not found" });
 
@@ -195,42 +232,68 @@ exports.permanentDeleteBlog = async (req, res) => {
 };
 
 // ------------------------------------------
-// Temporary in-memory store (better: Redis or DB)
-const otpStore = new Map();
+// Blog reader email OTP - stored in MongoDB (see model/emailAuthModel.js)
+const OTP_TTL_MS = 5 * 60 * 1000;
+const OTP_RESEND_MS = 60 * 1000; // at most one email per minute per address
+const OTP_MAX_ATTEMPTS = 5;
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 // Send OTP
 exports.sendOTP = async (req, res) => {
-  const { email } = req.body;
-  if (!email) return res.status(400).json({ message: "Email required" });
+  try {
+    const email = String(req.body.email || "").trim().toLowerCase();
+    if (!EMAIL_RE.test(email))
+      return res.status(400).json({ message: "Valid email required" });
 
-  const otp = Math.floor(100000 + Math.random() * 900000).toString();
-  otpStore.set(email, { otp, expiresAt: Date.now() + 5 * 60 * 1000 });
+    const existing = await EmailOtp.findOne({ email }).lean();
+    if (existing && existing.expiresAt - OTP_TTL_MS + OTP_RESEND_MS > Date.now()) {
+      return res
+        .status(429)
+        .json({ message: "Please wait a minute before requesting another OTP" });
+    }
 
-  const html = blogOtpEmailTemplate(otp);
-  await sendEmail(email, "Verify your email - Shubukan India", html);
+    const otp = crypto.randomInt(100000, 1000000).toString();
+    await EmailOtp.findOneAndUpdate(
+      { email },
+      { otpHash: hashValue(otp), attempts: 0, expiresAt: new Date(Date.now() + OTP_TTL_MS) },
+      { upsert: true }
+    );
 
-  res.json({ message: "OTP sent to email" });
+    const html = blogOtpEmailTemplate(otp);
+    await sendEmail(email, "Verify your email - Shubukan India", html);
+
+    res.json({ message: "OTP sent to email" });
+  } catch (error) {
+    return res.status(500).json({ message: error.message });
+  }
 };
 
 // Verify OTP
-exports.verifyOTP = (req, res) => {
-  const { email, otp } = req.body;
-  const data = otpStore.get(email);
+exports.verifyOTP = async (req, res) => {
+  try {
+    const email = String(req.body.email || "").trim().toLowerCase();
+    const otp = String(req.body.otp || "").trim();
 
-  if (!data) return res.status(400).json({ message: "No OTP sent" });
-  if (Date.now() > data.expiresAt)
-    return res.status(400).json({ message: "OTP expired" });
-  if (data.otp !== otp) return res.status(400).json({ message: "Invalid OTP" });
+    const data = await EmailOtp.findOne({ email });
+    if (!data || data.expiresAt < new Date())
+      return res.status(400).json({ message: "OTP expired or not sent" });
+    if (data.attempts >= OTP_MAX_ATTEMPTS) {
+      await data.deleteOne();
+      return res.status(429).json({ message: "Too many attempts, request a new OTP" });
+    }
+    if (data.otpHash !== hashValue(otp)) {
+      data.attempts += 1;
+      await data.save();
+      return res.status(400).json({ message: "Invalid OTP" });
+    }
 
-  otpStore.delete(email);
+    await data.deleteOne();
+    const token = await createEmailSession(email);
 
-  // Generate a simple session token (or JWT if you want)
-  const token = crypto.randomBytes(16).toString("hex");
-
-  // ✅ Save session in verified users list
-  addVerifiedUser(email, token);
-
-  res.json({ message: "Email verified", token });
+    res.json({ message: "Email verified", token, email });
+  } catch (error) {
+    return res.status(500).json({ message: error.message });
+  }
 };
 
 // Like a blog
