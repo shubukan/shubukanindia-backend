@@ -34,6 +34,9 @@ app.use(
       "x-email",
       "x-email-token",
     ],
+    // Let browsers cache the preflight (OPTIONS) answer instead of sending one
+    // before every authenticated request. Chrome caps this at 2 hours.
+    maxAge: 7200,
   }),
 );
 
