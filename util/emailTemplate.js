@@ -208,8 +208,9 @@ exports.blogOtpEmailTemplate = (otp) => {
 };
 
 /* ===== GUARDIAN OTP ===== */
-exports.guardianOtpEmailTemplate = (otp) => {
+exports.guardianOtpEmailTemplate = (otp, title) => {
   const safeOtp = escapeHtml(otp);
+  const safeTitle = escapeHtml(title);
   return `
   <!doctype html>
   <html lang="en">
@@ -223,15 +224,15 @@ exports.guardianOtpEmailTemplate = (otp) => {
               <img src="${logoUrl}" width="48" height="48" alt="Shubukan India" style="border-radius:6px;display:block" />
               <div>
                 <strong style="display:block;font-size:16px;">Shubukan India</strong>
-                <small style="opacity:0.9;">Guardian verification</small>
+                <small style="opacity:0.9;">Guardian Portal</small>
               </div>
             </td>
           </tr>
 
           <tr>
             <td style="padding:26px 28px;">
-              <h2 style="margin:0 0 8px;color:${COLORS.charcoal};font-size:20px;">Verify your email</h2>
-              <p style="margin:0 0 18px;color:${COLORS.muted};line-height:1.5;">Dear Guardian, use the code below to verify your account. This also ensures you receive evaluation form notifications by email.</p>
+              <h2 style="margin:0 0 8px;color:${COLORS.charcoal};font-size:20px;">${safeTitle}</h2>
+              <p style="margin:0 0 18px;color:${COLORS.muted};line-height:1.5;">Enter this one-time code on the Guardian Portal.</p>
 
               <div style="text-align:center;margin:18px 0;">
                 <div style="display:inline-block;padding:16px 22px;border-radius:10px;background:${COLORS.olive};box-shadow:0 4px 12px rgba(0,0,0,0.06);">
