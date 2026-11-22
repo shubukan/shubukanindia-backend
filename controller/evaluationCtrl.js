@@ -8,7 +8,23 @@ const { sendEmail } = require("../util/sendEmail");
 const { evaluationWindowEmailTemplate } = require("../util/emailTemplate");
 const { generateEvaluationFormPdf } = require("../util/evaluationPdf");
 
-const EDIT_WINDOW_MS = 5 * 60 * 1000; // 5 minutes
+const EDIT_WINDOW_HOURS = 12;
+const EDIT_WINDOW_MS = EDIT_WINDOW_HOURS * 60 * 60 * 1000;
+const EDIT_EXPIRED_MESSAGE = `The ${EDIT_WINDOW_HOURS}-hour edit window after submission has expired.`;
+
+const submissionEditDeadline = (form) =>
+  form.submittedAt ? new Date(form.submittedAt).getTime() + EDIT_WINDOW_MS : NaN;
+
+const windowCoversLearner = (window, learner) =>
+  learner?.instructorCode && window.instructorCodes.includes(learner.instructorCode);
+
+function getEditableUntil(form, window, learner) {
+  if (form?.status !== "submitted" || !window?.isCurrentlyOpen() || !windowCoversLearner(window, learner)) {
+    return null;
+  }
+  const deadline = Math.min(submissionEditDeadline(form), new Date(window.endDate).getTime());
+  return Number.isFinite(deadline) ? new Date(deadline) : null;
+}
 
 // Select inputs on the frontend send "" before a choice is made. Mongoose enum
 // paths only accept the declared values (plus null), so "" must be normalized
@@ -173,6 +189,7 @@ exports.getActiveWindowsForGuardian = async (req, res) => {
               status: f ? f.status : "pending",
               formId: f ? f._id : null,
               submittedAt: f ? f.submittedAt : null,
+              editableUntil: getEditableUntil(f, w, l),
             };
           }),
         };
@@ -193,7 +210,7 @@ const assertLearnerIsGuardians = async (guardianId, learnerId) => {
 const assertWindowOpenForLearner = async (windowId, learner) => {
   const window = await EvaluationWindowModel.findOne({ _id: windowId, isDeleted: false });
   if (!window) return { window: null, ok: false, reason: "Evaluation window not found" };
-  if (!learner.instructorCode || !window.instructorCodes.includes(learner.instructorCode)) {
+  if (!windowCoversLearner(window, learner)) {
     return { window, ok: false, reason: "This window does not cover this learner's instructor" };
   }
   if (!window.isCurrentlyOpen()) {
@@ -214,11 +231,8 @@ exports.saveDraftForm = async (req, res) => {
 
     let form = await EvaluationFormModel.findOne({ windowId, learnerId, isDeleted: false });
 
-    if (form && form.status === "submitted") {
-      const withinEdit = Date.now() - new Date(form.submittedAt).getTime() <= EDIT_WINDOW_MS;
-      if (!withinEdit) {
-        return res.status(403).json({ message: "Edit window (5 minutes after submission) has expired" });
-      }
+    if (form?.status === "submitted" && !(Date.now() < submissionEditDeadline(form))) {
+      return res.status(403).json({ message: EDIT_EXPIRED_MESSAGE });
     }
 
     const { student, teacher, training, filledByName } = req.body;
@@ -240,7 +254,10 @@ exports.saveDraftForm = async (req, res) => {
       form = await EvaluationFormModel.create(update);
     } else {
       Object.assign(form, update);
-      // finalized forms edited within the 5-min window stay "submitted"
+      if (form.status === "submitted") {
+        const missing = findMissingFields(form);
+        if (missing.length) return respondWithMissingFields(res, missing);
+      }
       await form.save();
     }
 
@@ -249,94 +266,93 @@ exports.saveDraftForm = async (req, res) => {
     if (error.code === 11000) {
       return res.status(400).json({ message: "A form for this learner already exists for this window" });
     }
+    if (error.name === "VersionError") {
+      return res.status(409).json({ message: "This form changed in another session. Reload it before saving." });
+    }
     return res.status(500).json({ success: false, message: error.message });
   }
 };
 
-// Validates that every mandatory field is filled before allowing finalization.
-// The second argument to req() is what the guardian actually sees in the
-// "please fill in ..." error if it's missing — a plain question label, not a
-// dev-facing field path — so keep it human-readable.
+// Validation metadata lets the form highlight questions without matching display text.
+const requiredFields = {
+  student: [
+    ["student.name", "Student Name"],
+    ["student.age", "Age"],
+    ["student.dob", "Date of Birth"],
+    ["student.currentRank", "Student's Current Rank"],
+    ["student.classOf", "Class"],
+    ["student.board", "Board"],
+    ["student.studyTime", "Study Time"],
+    ["student.karatePractice.mode", "Karate Practice Time"],
+    ["student.karateNotes.mode", "Karate Notes/Theory Studies"],
+    ["student.otherArtsNames", "Other Arts Practiced (names)"],
+    ["student.otherArtsPractice.mode", "Other Arts Practice Time"],
+    ["student.physicalExerciseTime", "Physical Exercise Time"],
+    ["student.screenDevice.used", "Screen Device Usage"],
+    ["student.screenDevice.mode", "Screen Device — How Often", { path: "student.screenDevice.used", value: true }],
+    ["student.sleep.totalDuration", "Sleep Duration"],
+    ["student.sleep.bedTime", "Bed Time"],
+    ["student.food.type", "Food Type (Veg/Non-Veg)"],
+    ["student.food.times.breakfast", "Breakfast Time"],
+    ["student.food.times.lunch", "Lunch Time"],
+    ["student.food.times.afternoonSnacks", "Afternoon Snacks Time"],
+    ["student.food.times.dinner", "Dinner Time"],
+    ["student.height", "Height"],
+    ["student.weight", "Weight"],
+    ["student.sportPerformance", "Sport Performance"],
+    ["student.hobby", "Hobby"],
+    ["student.karateLearningRemarks", "Remarks on Karate Learning"],
+  ],
+  teacher: [
+    ["teacher.punctual", "Is Teacher Punctual"],
+    ["teacher.attentionToEachStudent", "Teacher's Attention to Each Student"],
+    ["teacher.hardWorking", "Teacher's Hard Work in Teaching"],
+    ["teacher.goodTrainingAreas", "What Teacher Trains Well"],
+    ["teacher.honest", "Is Teacher Honest"],
+    ["teacher.remarks", "Remarks About Teacher"],
+  ],
+  training: [
+    ["training.trainingNeeded", "Which Training You Need"],
+    ["training.studiedSportKarateBefore.answer", "Studied Sport Karate Before"],
+    ["training.studiedSportKarateBefore.styleName", "Style Name (Sport Karate)", { path: "training.studiedSportKarateBefore.answer", value: true }],
+    ["training.studiedSportKarateBefore.coachName", "Coach Name (Sport Karate)", { path: "training.studiedSportKarateBefore.answer", value: true }],
+    ["training.studiedSportKarateBefore.yearsLearnt", "Years Learnt (Sport Karate)", { path: "training.studiedSportKarateBefore.answer", value: true }],
+    ["training.newInTraditionalFullContact", "New in Traditional Full Contact Karate"],
+    ["training.otherMartialArts.answer", "Any Other Martial Arts Practiced"],
+    ["training.otherMartialArts.styleName", "Style Name (Other Martial Arts)", { path: "training.otherMartialArts.answer", value: true }],
+    ["training.otherMartialArts.coachName", "Coach Name (Other Martial Arts)", { path: "training.otherMartialArts.answer", value: true }],
+    ["training.otherMartialArts.yearsLearnt", "Years Learnt (Other Martial Arts)", { path: "training.otherMartialArts.answer", value: true }],
+    ["training.preferScientificEffectiveLesson", "Prefer Scientific, Effective Lessons"],
+    ["training.preferScientificSuggestion", "Suggestion (Scientific Lessons)", { path: "training.preferScientificEffectiveLesson", value: false }],
+    ["training.preferOnlyFitness", "Prefer Only a Fitness Programme"],
+    ["training.preferOnlyFitnessSuggestion", "Suggestion (Fitness Programme)", { path: "training.preferOnlyFitness", value: true }],
+    ["training.onlyNeedBeltCertificate", "Only Need Belt & Certificate"],
+    ["training.onlyNeedBeltCertificateSuggestion", "Suggestion (Belt & Certificate)", { path: "training.onlyNeedBeltCertificate", value: false }],
+    ["training.remarksAndSuggestion", "Remarks & Suggestion (Training)"],
+  ],
+  signature: [["filledByName", "Guardian's Name (Signature)"]],
+};
+
 function findMissingFields(form) {
   const missing = [];
-  const req = (cond, label) => {
-    if (!cond) missing.push(label);
-  };
-  const s = form.student || {};
-  req(s.name, "Student Name");
-  req(s.age !== null && s.age !== undefined, "Age");
-  req(s.dob, "Date of Birth");
-  req(s.currentRank, "Student's Current Rank");
-  req(s.classOf, "Class");
-  req(s.board, "Board");
-  req(s.studyTime, "Study Time");
-  req(s.karatePractice?.mode, "Karate Practice Time");
-  req(s.karateNotes?.mode, "Karate Notes/Theory Studies");
-  req(s.otherArtsNames, "Other Arts Practiced (names)");
-  req(s.otherArtsPractice?.mode, "Other Arts Practice Time");
-  req(s.physicalExerciseTime, "Physical Exercise Time");
-  req(s.screenDevice?.used !== null && s.screenDevice?.used !== undefined, "Screen Device Usage");
-  if (s.screenDevice?.used) req(s.screenDevice?.mode, "Screen Device — How Often");
-  req(s.sleep?.totalDuration, "Sleep Duration");
-  req(s.sleep?.bedTime, "Bed Time");
-  // afternoon sleep is optional
-  req(s.food?.type, "Food Type (Veg/Non-Veg)");
-  req(s.food?.times?.breakfast, "Breakfast Time");
-  req(s.food?.times?.lunch, "Lunch Time");
-  req(s.food?.times?.afternoonSnacks, "Afternoon Snacks Time");
-  req(s.food?.times?.dinner, "Dinner Time");
-  req(s.height !== null && s.height !== undefined, "Height");
-  req(s.weight !== null && s.weight !== undefined, "Weight");
-  req(s.sportPerformance, "Sport Performance");
-  req(s.hobby, "Hobby");
-  req(s.karateLearningRemarks, "Remarks on Karate Learning");
-
-  const t = form.teacher || {};
-  req(t.punctual !== null && t.punctual !== undefined, "Is Teacher Punctual");
-  req(t.attentionToEachStudent !== null && t.attentionToEachStudent !== undefined, "Teacher's Attention to Each Student");
-  req(t.hardWorking !== null && t.hardWorking !== undefined, "Teacher's Hard Work in Teaching");
-  req(t.goodTrainingAreas && t.goodTrainingAreas.length, "What Teacher Trains Well");
-  req(t.honest !== null && t.honest !== undefined, "Is Teacher Honest");
-  req(t.remarks, "Remarks About Teacher");
-
-  const tr = form.training || {};
-  req(tr.trainingNeeded && tr.trainingNeeded.length, "Which Training You Need");
-  req(
-    tr.studiedSportKarateBefore?.answer !== null && tr.studiedSportKarateBefore?.answer !== undefined,
-    "Studied Sport Karate Before"
-  );
-  if (tr.studiedSportKarateBefore?.answer) {
-    req(tr.studiedSportKarateBefore?.styleName, "Style Name (Sport Karate)");
-    req(tr.studiedSportKarateBefore?.coachName, "Coach Name (Sport Karate)");
-    req(tr.studiedSportKarateBefore?.yearsLearnt, "Years Learnt (Sport Karate)");
+  for (const [section, fields] of Object.entries(requiredFields)) {
+    for (const [path, label, when] of fields) {
+      if (when && form.get(when.path) !== when.value) continue;
+      const value = form.get(path);
+      if (value == null || (typeof value === "string" && !value.trim()) || (Array.isArray(value) && !value.length)) {
+        missing.push({ section, path, label, when });
+      }
+    }
   }
-  req(
-    tr.newInTraditionalFullContact !== null && tr.newInTraditionalFullContact !== undefined,
-    "New in Traditional Full Contact Karate"
-  );
-  req(tr.otherMartialArts?.answer !== null && tr.otherMartialArts?.answer !== undefined, "Any Other Martial Arts Practiced");
-  if (tr.otherMartialArts?.answer) {
-    req(tr.otherMartialArts?.styleName, "Style Name (Other Martial Arts)");
-    req(tr.otherMartialArts?.coachName, "Coach Name (Other Martial Arts)");
-    req(tr.otherMartialArts?.yearsLearnt, "Years Learnt (Other Martial Arts)");
-  }
-  req(
-    tr.preferScientificEffectiveLesson !== null && tr.preferScientificEffectiveLesson !== undefined,
-    "Prefer Scientific, Effective Lessons"
-  );
-  if (tr.preferScientificEffectiveLesson === false) req(tr.preferScientificSuggestion, "Suggestion (Scientific Lessons)");
-  req(tr.preferOnlyFitness !== null && tr.preferOnlyFitness !== undefined, "Prefer Only a Fitness Programme");
-  if (tr.preferOnlyFitness === true) req(tr.preferOnlyFitnessSuggestion, "Suggestion (Fitness Programme)");
-  req(
-    tr.onlyNeedBeltCertificate !== null && tr.onlyNeedBeltCertificate !== undefined,
-    "Only Need Belt & Certificate"
-  );
-  if (tr.onlyNeedBeltCertificate === false) req(tr.onlyNeedBeltCertificateSuggestion, "Suggestion (Belt & Certificate)");
-  req(tr.remarksAndSuggestion, "Remarks & Suggestion (Training)");
-
-  req(form.filledByName, "Guardian's Name (Signature)");
-
   return missing;
+}
+
+function respondWithMissingFields(res, missing) {
+  return res.status(400).json({
+    message: "Form is incomplete",
+    missingFields: missing.map(({ label }) => label),
+    missingFieldDetails: missing,
+  });
 }
 
 exports.finalizeForm = async (req, res) => {
@@ -351,24 +367,24 @@ exports.finalizeForm = async (req, res) => {
     const form = await EvaluationFormModel.findOne({ windowId, learnerId, isDeleted: false });
     if (!form) return res.status(404).json({ message: "No draft found to finalize. Save the form first." });
 
-    if (form.status === "submitted") {
-      const withinEdit = Date.now() - new Date(form.submittedAt).getTime() <= EDIT_WINDOW_MS;
-      if (!withinEdit) {
-        return res.status(403).json({ message: "Edit window (5 minutes after submission) has expired" });
-      }
+    if (form.status === "submitted" && !(Date.now() < submissionEditDeadline(form))) {
+      return res.status(403).json({ message: EDIT_EXPIRED_MESSAGE });
     }
 
     const missing = findMissingFields(form);
-    if (missing.length) {
-      return res.status(400).json({ message: "Form is incomplete", missingFields: missing });
-    }
+    if (missing.length) return respondWithMissingFields(res, missing);
 
-    form.status = "submitted";
-    form.submittedAt = new Date();
-    await form.save();
+    if (form.status !== "submitted") {
+      form.status = "submitted";
+      form.submittedAt = new Date();
+      await form.save();
+    }
 
     return res.json({ success: true, message: "Form submitted", data: form });
   } catch (error) {
+    if (error.name === "VersionError") {
+      return res.status(409).json({ message: "This form changed in another session. Reload it before submitting." });
+    }
     return res.status(500).json({ success: false, message: error.message });
   }
 };
@@ -379,7 +395,36 @@ exports.getMyForms = async (req, res) => {
     const forms = await EvaluationFormModel.find({ guardianId: req.guardian._id, isDeleted: false }).sort({
       createdAt: -1,
     });
-    return res.json({ success: true, count: forms.length, data: forms });
+    const now = Date.now();
+    const recentSubmissions = forms.filter(
+      (form) => form.status === "submitted" && now < submissionEditDeadline(form)
+    );
+    const windowsById = new Map();
+    const learnersById = new Map();
+    if (recentSubmissions.length) {
+      const [windows, learners] = await Promise.all([
+        EvaluationWindowModel.find({
+          _id: { $in: recentSubmissions.map((form) => form.windowId) },
+          isDeleted: false,
+        }).select("startDate endDate closedEarly instructorCodes"),
+        LearnerModel.find({
+          _id: { $in: recentSubmissions.map((form) => form.learnerId) },
+          guardianId: req.guardian._id,
+          isDeleted: false,
+        }).select("instructorCode"),
+      ]);
+      for (const window of windows) windowsById.set(String(window._id), window);
+      for (const learner of learners) learnersById.set(String(learner._id), learner);
+    }
+    const data = forms.map((form) => ({
+      ...form.toObject(),
+      editableUntil: getEditableUntil(
+        form,
+        windowsById.get(String(form.windowId)),
+        learnersById.get(String(form.learnerId))
+      ),
+    }));
+    return res.json({ success: true, count: data.length, data });
   } catch (error) {
     return res.status(500).json({ success: false, message: error.message });
   }

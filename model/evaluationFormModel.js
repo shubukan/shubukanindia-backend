@@ -145,7 +145,7 @@ const evaluationFormSchema = new Schema(
 
     isDeleted: { type: Boolean, default: false },
   },
-  { timestamps: true }
+  { timestamps: true, optimisticConcurrency: true }
 );
 
 // One in-progress (draft or submitted) form per learner per window
