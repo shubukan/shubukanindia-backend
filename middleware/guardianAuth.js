@@ -13,7 +13,7 @@ exports.guardianAuth = async (req, res, next) => {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
     const guardian = await GuardianModel.findById(decoded.id);
-    if (!guardian || guardian.isDeleted) {
+    if (!guardian || guardian.isDeleted || (decoded.authVersion ?? 0) !== (guardian.authVersion ?? 0)) {
       return res.status(401).json({ message: "Invalid token" });
     }
 

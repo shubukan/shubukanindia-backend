@@ -146,6 +146,9 @@ const {
   verifyGuardianOtp,
   resendGuardianOtp,
   loginGuardian,
+  requestGuardianCode,
+  loginGuardianWithOtp,
+  resetGuardianPassword,
   getGuardianProfile,
   updateGuardianProfile,
 } = require("../controller/guardianCtrl");
@@ -339,6 +342,9 @@ router.post("/guardian/signup", signupGuardian);
 router.post("/guardian/verify-otp", verifyGuardianOtp);
 router.post("/guardian/resend-otp", resendGuardianOtp);
 router.post("/guardian/login", loginGuardian);
+router.post("/guardian/request-otp", requestGuardianCode);
+router.post("/guardian/login-otp", loginGuardianWithOtp);
+router.post("/guardian/reset-password", resetGuardianPassword);
 router.get("/guardian/profile", guardianAuth, getGuardianProfile);
 router.put("/guardian/profile", guardianAuth, updateGuardianProfile);
 router.get("/guardian/dojo-instructor-directory", guardianAuth, getDojoInstructorDirectory);
