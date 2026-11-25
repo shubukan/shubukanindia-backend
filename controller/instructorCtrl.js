@@ -2,9 +2,10 @@
 const InstructorModel = require("../model/instructorModel");
 const InstructorIDModel = require("../model/instructorIDModel");
 const crypto = require("crypto");
-const jwt = require("jsonwebtoken");
-const { sendEmail } = require("../util/sendEmail");
 const { instructorOtpEmailTemplate } = require("../util/emailTemplate");
+const { examEmailCode, normalizeEmail, validEmail, byEmail } = require("../util/examEmailCode");
+
+const codes = examEmailCode(InstructorModel, "instructor", instructorOtpEmailTemplate);
 
 // Generate random 10-char alphanumeric Instructor ID
 const generateId = () => {
@@ -20,10 +21,12 @@ const generateId = () => {
 // Admin creates new Instructor ID
 exports.generateInstructorId = async (req, res) => {
   try {
-    const { name, identity } = req.body;
+    const { name, identity } = req.body ?? {};
+    const email = normalizeEmail(req.body?.email).toLowerCase();
     if (!name) return res.status(400).json({ message: "Name required" });
     if (!identity)
       return res.status(400).json({ message: "Identity required" });
+    if (!validEmail(email)) return res.status(400).json({ message: "Enter the instructor's invitation email." });
 
     let instructorId;
     let exists = true;
@@ -38,6 +41,7 @@ exports.generateInstructorId = async (req, res) => {
       name,
       identity,
       instructorId,
+      email,
     });
 
     return res.status(201).json(instructor);
@@ -49,28 +53,7 @@ exports.generateInstructorId = async (req, res) => {
 // For public
 exports.getPublicInstructors = async (req, res) => {
   try {
-    const instructors = await InstructorIDModel.aggregate([
-      { $match: { isDeleted: false } },
-      {
-        $lookup: {
-          from: InstructorModel.collection.name, // ensures correct collection name
-          localField: "instructorId",
-          foreignField: "instructorId",
-          as: "inst"
-        }
-      },
-      { $unwind: { path: "$inst", preserveNullAndEmptyArrays: true } },
-      {
-        $project: {
-          name: 1,
-          identity: 1,
-          // Use Instructor._id (converted to string) if present; otherwise keep the original instructorId string
-          _id: {
-            $ifNull: [{ $toString: "$inst._id" }, "$instructorId"]
-          }
-        }
-      }
-    ]);
+    const instructors = await InstructorIDModel.find({ isDeleted: false }).select("name identity").lean();
 
     return res.json({ instructors });
   } catch (error) {
@@ -93,20 +76,25 @@ exports.getAllInstructors = async (req, res) => {
 exports.editInstructor = async (req, res) => {
   try {
     const { iid } = req.params; // instructorId
-    const { name, identity } = req.body;
+    const { name, identity } = req.body ?? {};
+    const email = normalizeEmail(req.body?.email).toLowerCase();
 
-    if (!name && !identity) {
+    if (!name && !identity && !email) {
       return res.status(400).json({ message: "Nothing to update" });
     }
 
+    if (email && !validEmail(email)) return res.status(400).json({ message: "Enter a valid invitation email." });
+    const target = await InstructorIDModel.findOne({ instructorId: iid, isDeleted: false }).select("claimed");
+    if (!target) return res.status(404).json({ message: "Instructor not found" });
+    const setInvitation = Boolean(email && !target.claimed);
     const updatedInstructor = await InstructorIDModel.findOneAndUpdate(
-      { instructorId: iid, isDeleted: false },
-      { $set: { ...(name && { name }), ...(identity && { identity }) } },
-      { new: true }
+      { _id: target._id, isDeleted: false, ...(setInvitation && { claimed: { $ne: true } }) },
+      { $set: { ...(name && { name }), ...(identity && { identity }), ...(setInvitation && { email }) } },
+      { returnDocument: "after" }
     );
 
     if (!updatedInstructor) {
-      return res.status(404).json({ message: "Instructor not found" });
+      return res.status(409).json({ message: "The instructor changed. Reload and try again." });
     }
 
     return res.json({
@@ -162,179 +150,40 @@ exports.permaDelInstruct = async (req, res) => {
 };
 
 // -----------------------------------------------------------------
-// ReSend OTP (Signup/Login) - using DB fields now
-exports.resendInstructorOtp = async (req, res) => {
-  try {
-    const { email, type } = req.body; // type = "signup" | "login"
-    if (!email || !type)
-      return res.status(400).json({ message: "Email and type required" });
-
-    const instructor = await InstructorModel.findOne({
-      email,
-      isDeleted: false,
-    });
-    if (!instructor)
-      return res.status(404).json({ message: "Instructor not found" });
-
-    if (type === "signup" && instructor.isVerified) {
-      return res
-        .status(400)
-        .json({ message: "Already verified, please login instead" });
-    }
-
-    if (type === "login" && !instructor.isVerified) {
-      return res
-        .status(400)
-        .json({ message: "Not verified yet, please signup first" });
-    }
-
-    // generate OTP and persist to DB
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    instructor.otp = otp;
-    instructor.otpExpiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
-    await instructor.save();
-
-    await sendEmail(
-      email,
-      "OTP - Shubukan India Exam",
-      instructorOtpEmailTemplate(otp)
-    );
-
-    return res.json({ message: "OTP resent to email" });
-  } catch (error) {
-    return res.status(500).json({ message: error.message });
-  }
-};
-
-// Verify OTP - using DB fields now
-exports.verifyInstructorOtp = async (req, res) => {
-  try {
-    const { email, otp } = req.body;
-    if (!email || !otp) return res.status(400).json({ message: "Email and OTP required" });
-
-    const instructor = await InstructorModel.findOne({
-      email,
-      isDeleted: false,
-    });
-    if (!instructor)
-      return res.status(404).json({ message: "Instructor not found" });
-
-    if (!instructor.otp || !instructor.otpExpiresAt)
-      return res.status(400).json({ message: "No OTP sent" });
-
-    if (Date.now() > new Date(instructor.otpExpiresAt).getTime())
-      return res.status(400).json({ message: "OTP expired" });
-
-    if (instructor.otp !== otp)
-      return res.status(400).json({ message: "Invalid OTP" });
-
-    // Clear OTP and mark verified
-    instructor.otp = undefined;
-    instructor.otpExpiresAt = undefined;
-    instructor.isVerified = true;
-    await instructor.save();
-
-    const token = jwt.sign(
-      { id: instructor._id, email },
-      process.env.JWT_SECRET,
-      {
-        expiresIn: "7d",
-      }
-    );
-
-    return res.json({ message: "OTP verified", token });
-  } catch (error) {
-    return res.status(500).json({ message: error.message });
-  }
-};
-
-// Signup
+// Signup binds an invitation to the email assigned by an admin.
 exports.signupInstructor = async (req, res) => {
   try {
-    const { name, email, mobile, instructorId } = req.body;
-
-    const existing = await InstructorModel.findOne({ email });
-    if (existing)
-      return res.status(400).json({ message: "Email already registered" });
-
-    const existingID = await InstructorIDModel.findOne({
-      instructorId,
-      isDeleted: false,
-    });
-    if (!existingID)
-      return res.status(400).json({ message: "Contact admin to get ID" });
-
-    if (existingID.claimed) {
-      return res.status(400).json({ message: "Instructor ID already claimed" });
+    const { name, mobile } = req.body ?? {};
+    const email = normalizeEmail(req.body?.email);
+    const code = typeof req.body?.instructorId === "string" ? req.body.instructorId.trim().toUpperCase() : "";
+    if (!name?.trim?.() || !validEmail(email) || !code) {
+      return res.status(400).json({ message: "Enter your name, invitation email, and instructor ID." });
     }
-
-    // generate OTP
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    const otpExpiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
-
-    const instructor = await InstructorModel.create({
-      name,
-      email,
-      mobile,
-      instructorId,
-      isVerified: false,
-      otp,
-      otpExpiresAt,
-    });
-
-    // Mark the ID as claimed
-    existingID.claimed = true;
-    await existingID.save();
-
-    // send OTP email
-    await sendEmail(
-      email,
-      "Verify your email - Shubukan India Exam",
-      instructorOtpEmailTemplate(otp)
-    );
-
-    return res
-      .status(201)
-      .json({ message: "Instructor registered. OTP sent to email." });
+    if (await InstructorModel.exists({ $or: [{ email: byEmail(email) }, { instructorId: code }] })) {
+      return res.status(409).json({ message: "This account is already registered. Log in to request a code." });
+    }
+    const invitation = await InstructorIDModel.findOneAndUpdate({
+      instructorId: code, email: byEmail(email), isDeleted: false, claimed: { $ne: true },
+    }, { $set: { claimed: true } });
+    if (!invitation) {
+      return res.status(400).json({ message: "The instructor ID and invitation email did not match an available invitation." });
+    }
+    try {
+      await InstructorModel.create({ name, email: email.toLowerCase(), mobile, instructorId: code, isVerified: false });
+    } catch (error) {
+      await InstructorIDModel.updateOne({ _id: invitation._id }, { $set: { claimed: false } });
+      throw error;
+    }
+    return await codes.issue(email, res, 201);
   } catch (error) {
-    return res.status(500).json({ message: error.message });
+    return res.status(error.code === 11000 ? 409 : 500).json({ message: "Could not register the instructor account. Try logging in if you already registered." });
   }
 };
 
-// Login
-exports.loginInstructor = async (req, res) => {
-  try {
-    const { email } = req.body;
-    const instructor = await InstructorModel.findOne({
-      email,
-      isDeleted: false,
-    });
+exports.loginInstructor = codes.request;
+exports.resendInstructorOtp = codes.request;
+exports.verifyInstructorOtp = codes.verify;
 
-    if (!instructor)
-      return res.status(404).json({ message: "Instructor not found" });
-
-    // if (!instructor.isVerified)
-    //   return res
-    //     .status(400)
-    //     .json({ message: "Instructor not verified. Please sign up first." });
-
-    // generate OTP and persist
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    instructor.otp = otp;
-    instructor.otpExpiresAt = new Date(Date.now() + 5 * 60 * 1000);
-    await instructor.save();
-
-    await sendEmail(
-      email,
-      "Login OTP - Shubukan India Exam",
-      instructorOtpEmailTemplate(otp)
-    );
-
-    return res.json({ message: "OTP sent to email for login" });
-  } catch (error) {
-    return res.status(500).json({ message: error.message });
-  }
-};
 
 // Get Profile
 exports.getInstructorProfile = async (req, res) => {

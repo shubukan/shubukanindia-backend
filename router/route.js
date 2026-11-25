@@ -89,17 +89,17 @@ const {
   startExam,
   startExamPublic,
   submitExamPublic,
+  saveExamAnswers,
   getAllExams,
   getInsUpcomingExams,
   getStuUpcomingExams,
   viewAnswerSheets,
+  getQuestionPaper,
 } = require("../controller/examCtrl");
 const {
   submitExam,
-  getResultsByInstructor,
   getResultsByStudent,
   viewAnswerSheet,
-  getQuestionPaper,
   getMyResults,
   getAllResults,
   getResultsSummary,
@@ -251,10 +251,12 @@ router.get("/instructor/exams/upcoming", instructorAuth, getInsUpcomingExams);
 
 // public start (no auth)
 router.post("/exam/start", startExamPublic);
+router.put("/exam/:examId/answers", saveExamAnswers);
 router.post("/exam/:examId/submit", submitExamPublic);
 
 // STUDENT routes to start and submit
 router.post("/student/exam/start", studentAuth, startExam); // body: { examID, examSet, password? }
+router.put("/student/exam/:examId/answers", studentAuth, saveExamAnswers);
 router.post("/student/exam/:examId/submit", studentAuth, submitExam);
 
 router.get("/student/results", studentAuth, getMyResults);

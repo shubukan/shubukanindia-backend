@@ -2,6 +2,14 @@
 const Question = require("../model/questionModel");
 const Exam = require("../model/examModel");
 const Counter = require("../model/counterModel");
+const { questionUsage } = require("../util/examQuestionUsage");
+
+function validQuestion(question, options, answer) {
+  return typeof question === "string" && question.trim() &&
+    Array.isArray(options) && options.length >= 2 &&
+    options.every((option) => typeof option === "string" && option.trim()) &&
+    Number.isInteger(answer) && answer >= 0 && answer < options.length;
+}
 
 // controllers/questionController.js
 exports.deleteAll = async (req, res) => {
@@ -19,10 +27,15 @@ exports.deleteAll = async (req, res) => {
 // View all questions
 exports.getAllQuestions = async (req, res) => {
   try {
-    const questions = await Question.find()
+    const questions = await Question.find({ isDeleted: false })
       .select("-__v")
-      .sort({ questionID: -1 });
-    return res.json(questions);
+      .sort({ questionID: -1 })
+      .lean();
+    const usage = await questionUsage(questions.map(({ _id }) => _id));
+    return res.json(questions.map((question) => {
+      const usedInExams = usage.get(String(question._id)) || [];
+      return { ...question, usedInExams, used: usedInExams.length > 0 };
+    }));
   } catch (error) {
     return res.status(500).json({ message: error.message });
   }
@@ -53,10 +66,8 @@ const getNextQuestionID = async () => {
 exports.createQuestion = async (req, res) => {
   try {
     const { question, options, answer, questionSet } = req.body;
-    if (!question || !options || !Array.isArray(options) || options.length < 2)
-      return res.status(400).json({ message: "Invalid question/options" });
-    if (typeof answer !== "number" || answer < 0 || answer >= options.length)
-      return res.status(400).json({ message: "Invalid answer index" });
+    if (!validQuestion(question, options, answer))
+      return res.status(400).json({ message: "Enter a question, at least two options, and a valid answer." });
 
     // get sequential questionID
     const questionID = await getNextQuestionID();
@@ -112,9 +123,14 @@ exports.updateQuestion = async (req, res) => {
     }
 
     // safe to update (either no exams, or all exams that include it are public on-demand with no examDate)
-    q.question = question ?? q.question;
-    q.options = options ?? q.options;
-    q.answer = typeof answer === "number" ? answer : q.answer;
+    const nextQuestion = question ?? q.question;
+    const nextOptions = options ?? q.options;
+    const nextAnswer = answer ?? q.answer;
+    if (!validQuestion(nextQuestion, nextOptions, nextAnswer))
+      return res.status(400).json({ message: "Enter a question, at least two options, and a valid answer." });
+    q.question = nextQuestion;
+    q.options = nextOptions;
+    q.answer = nextAnswer;
     q.questionSet = questionSet ?? q.questionSet;
     await q.save();
 

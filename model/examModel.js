@@ -16,7 +16,7 @@ const examSchema = new mongoose.Schema(
         return this.accessability !== "public";
       },
     },
-    // examEndTime = new Date(examDate.getTime() - (examDuration*60*1000))
+    // Scheduled end; on-demand attempts receive their own deadline.
     examEndTime: { type: Date },
     accessability: {
       type: String,
@@ -33,7 +33,7 @@ const examSchema = new mongoose.Schema(
     totalMarks: { type: Number, required: true },
     isDeleted: { type: Boolean, default: false },
   },
-  { timestamps: true }
+  { timestamps: true, optimisticConcurrency: true }
 );
 
 examSchema.index({ examID: 1, examSet: 1 }, { unique: true });

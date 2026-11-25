@@ -1,6 +1,7 @@
 // controller/studentCtrl.js
 const KataUploadModel = require("../model/kataUploadModel");
 const cloudinary = require("../config/cloudinary");
+const { resolveExamInstructor } = require("../util/examInstructors");
 
 // upload images from frontend, and send the image url to backend
 exports.getCloudKataSignature = async (req, res) => {
@@ -158,10 +159,9 @@ exports.getInstructorKataSheet = async (req, res) => {
     if (!student || student.isDeleted)
       return res.status(404).json({ message: "Student not found" });
 
-    // Accept either instructorId string or instructor _id depending on your app's stored value
-    const belongsToInstructor =
-      student.instructorId === req.instructor.instructorId ||
-      student.instructorId === String(req.instructor._id);
+    const instructor = await resolveExamInstructor(req.instructor._id);
+    const belongsToInstructor = instructor?.aliases.includes(student.instructorId) &&
+      student.instructorApproved !== false;
 
     if (!belongsToInstructor) {
       return res
