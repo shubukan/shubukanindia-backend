@@ -1,171 +1,43 @@
 // controller/studentCtrl.js
 const StudentModel = require("../model/studentModel");
 const InstructorModel = require("../model/instructorModel");
-const jwt = require("jsonwebtoken");
-const { sendEmail } = require("../util/sendEmail");
+const InstructorRegistry = require("../model/instructorIDModel");
 const { studentOtpEmailTemplate } = require("../util/emailTemplate");
+const { examEmailCode, examAccountProjection, normalizeEmail, validEmail, byEmail, escapeRegex } = require("../util/examEmailCode");
+const { resolveExamInstructor, instructorStudentsFilter } = require("../util/examInstructors");
 
-// Send OTP helper - persists OTP to student document
-const sendOtp = async (email, subject) => {
-  const otp = Math.floor(100000 + Math.random() * 900000).toString();
-  const otpExpiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
+const codes = examEmailCode(StudentModel, "student", studentOtpEmailTemplate);
+exports.loginStudent = codes.request;
+exports.resendStudentOtp = codes.request;
+exports.verifyStudentOtp = codes.verify;
 
-  // update student document with otp fields
-  const student = await StudentModel.findOneAndUpdate(
-    { email },
-    { otp, otpExpiresAt },
-    { new: true },
-  );
-
-  // If student not found here, caller should handle (signup flow creates student first)
-  await sendEmail(email, subject, studentOtpEmailTemplate(otp));
-};
-
-// Signup
 exports.signupStudent = async (req, res) => {
   try {
-    const {
-      name,
-      email,
-      mobile,
-      presentKyu,
-      lastCertificateNum,
-      instructorName,
-      instructorId,
-    } = req.body;
-
-    const existing = await StudentModel.findOne({ email });
-    if (existing)
-      return res.status(400).json({ message: "Email already registered" });
-
-    const student = await StudentModel.create({
-      name,
-      email,
-      mobile,
-      presentKyu,
-      lastCertificateNum,
-      instructorName,
-      instructorId,
+    const { name, mobile, presentKyu, lastCertificateNum, instructorName, instructorId } = req.body ?? {};
+    const email = normalizeEmail(req.body?.email);
+    if (typeof name !== "string" || !name.trim() || !validEmail(email)) {
+      return res.status(400).json({ message: "Enter your name and a valid email." });
+    }
+    if (await StudentModel.exists({ email: byEmail(email) })) {
+      return res.status(409).json({ message: "This email is already registered. Log in to request a code." });
+    }
+    const instructor = await resolveExamInstructor(instructorId);
+    if (instructorId && !instructor) return res.status(400).json({ message: "Select an instructor from the list." });
+    await StudentModel.create({
+      name, email: email.toLowerCase(), mobile, presentKyu, lastCertificateNum,
+      instructorName: instructor?.name || instructorName,
+      instructorId: instructor?.registryId || "",
+      instructorApproved: false,
       isVerified: false,
     });
-
-    // send OTP and persist on student document
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    const otpExpiresAt = new Date(Date.now() + 5 * 60 * 1000);
-    student.otp = otp;
-    student.otpExpiresAt = otpExpiresAt;
-    await student.save();
-
-    await sendEmail(
-      email,
-      "Verify your email - Shubukan India Exam (Student)",
-      studentOtpEmailTemplate(otp),
-    );
-
-    return res
-      .status(201)
-      .json({ message: "Student registered. OTP sent to email." });
+    return await codes.issue(email, res, 201);
   } catch (error) {
-    return res.status(500).json({ message: error.message });
+    return res.status(error.code === 11000 ? 409 : 500).json({ message: error.code === 11000
+      ? "This email is already registered. Log in to request a code."
+      : "Could not create your student account." });
   }
 };
 
-// Verify OTP
-exports.verifyStudentOtp = async (req, res) => {
-  try {
-    const { email, otp } = req.body;
-    if (!email || !otp)
-      return res.status(400).json({ message: "Email and OTP required" });
-
-    const student = await StudentModel.findOne({ email, isDeleted: false });
-    if (!student) return res.status(404).json({ message: "Student not found" });
-
-    if (!student.otp || !student.otpExpiresAt)
-      return res.status(400).json({ message: "No OTP sent" });
-
-    if (Date.now() > new Date(student.otpExpiresAt).getTime())
-      return res.status(400).json({ message: "OTP expired" });
-
-    if (student.otp !== otp)
-      return res.status(400).json({ message: "Invalid OTP" });
-
-    // Clear OTP and mark verified
-    student.otp = undefined;
-    student.otpExpiresAt = undefined;
-    student.isVerified = true;
-    await student.save();
-
-    const token = jwt.sign({ id: student._id, email }, process.env.JWT_SECRET, {
-      expiresIn: "7d",
-    });
-
-    return res.json({ message: "OTP verified", token });
-  } catch (error) {
-    return res.status(500).json({ message: error.message });
-  }
-};
-
-// Login
-exports.loginStudent = async (req, res) => {
-  try {
-    const { email } = req.body;
-    const student = await StudentModel.findOne({ email, isDeleted: false });
-
-    if (!student) return res.status(404).json({ message: "Student not found" });
-
-    // generate OTP and persist
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    student.otp = otp;
-    student.otpExpiresAt = new Date(Date.now() + 5 * 60 * 1000);
-    await student.save();
-
-    await sendEmail(
-      email,
-      "Login OTP - Shubukan India Exam (Student)",
-      studentOtpEmailTemplate(otp),
-    );
-    return res.json({ message: "OTP sent to email for login" });
-  } catch (error) {
-    return res.status(500).json({ message: error.message });
-  }
-};
-
-// Resend OTP
-exports.resendStudentOtp = async (req, res) => {
-  try {
-    const { email, type } = req.body; // type = signup | login
-    if (!email || !type)
-      return res.status(400).json({ message: "Email and type required" });
-
-    const student = await StudentModel.findOne({ email, isDeleted: false });
-    if (!student) return res.status(404).json({ message: "Student not found" });
-
-    if (type === "signup" && student.isVerified)
-      return res
-        .status(400)
-        .json({ message: "Already verified, please login instead" });
-
-    if (type === "login" && !student.isVerified)
-      return res
-        .status(400)
-        .json({ message: "Not verified yet, please signup first" });
-
-    // generate OTP and persist
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    student.otp = otp;
-    student.otpExpiresAt = new Date(Date.now() + 5 * 60 * 1000);
-    await student.save();
-
-    await sendEmail(
-      email,
-      `OTP - Shubukan India Exam (Student - ${type})`,
-      studentOtpEmailTemplate(otp),
-    );
-    return res.json({ message: "OTP resent to email" });
-  } catch (error) {
-    return res.status(500).json({ message: error.message });
-  }
-};
 
 // Profile
 exports.getStudentProfile = async (req, res) => {
@@ -191,6 +63,9 @@ exports.updateStudentProfile = async (req, res) => {
       instructorId,
     } = req.body;
 
+    const instructor = await resolveExamInstructor(instructorId);
+    if (instructorId && !instructor) return res.status(400).json({ message: "Select an instructor from the list." });
+    const sameInstructor = instructor?.aliases.includes(req.student.instructorId);
     const updated = await StudentModel.findByIdAndUpdate(
       req.student.id,
       {
@@ -198,8 +73,11 @@ exports.updateStudentProfile = async (req, res) => {
         mobile,
         presentKyu,
         lastCertificateNum,
-        instructorName,
-        instructorId,
+        ...(instructorId !== undefined && {
+          instructorName: instructor?.name || instructorName,
+          instructorId: instructor?.registryId || "",
+          ...(!sameInstructor && { instructorApproved: false }),
+        }),
       },
       { new: true, runValidators: true },
     ).select("-__v -createdAt -updatedAt -otp -otpExpiresAt");
@@ -214,10 +92,11 @@ exports.updateStudentProfile = async (req, res) => {
 // Instructor fetch their students
 exports.getMyStudents = async (req, res) => {
   try {
+    const instructor = await resolveExamInstructor(req.instructor._id);
     const students = await StudentModel.find({
-      instructorId: req.instructor._id,
+      ...instructorStudentsFilter(instructor),
       isDeleted: false,
-    });
+    }).select(examAccountProjection);
     return res.json(students);
   } catch (error) {
     return res.status(500).json({ message: error.message });
@@ -228,8 +107,9 @@ exports.getMyStudents = async (req, res) => {
 exports.deleteMyStudent = async (req, res) => {
   try {
     const { sid } = req.params;
+    const instructor = await resolveExamInstructor(req.instructor._id);
     const student = await StudentModel.findOneAndUpdate(
-      { _id: sid, instructorId: req.instructor.instructorId, isDeleted: false },
+      { _id: sid, ...instructorStudentsFilter(instructor), isDeleted: false },
       { isDeleted: true },
       { new: true },
     );
@@ -247,14 +127,15 @@ exports.deleteMyStudent = async (req, res) => {
 // Instructor: search only among their own students
 exports.searchMyStudents = async (req, res) => {
   try {
-    const { name } = req.query;
+    const name = typeof req.query.name === "string" ? req.query.name.trim() : "";
     if (!name) return res.status(400).json({ message: "Name query required" });
 
+    const instructor = await resolveExamInstructor(req.instructor._id);
     const students = await StudentModel.find({
-      instructorId: req.instructor.instructorId,
+      ...instructorStudentsFilter(instructor),
       isDeleted: false,
-      name: { $regex: name, $options: "i" }, // case-insensitive search
-    });
+      name: { $regex: escapeRegex(name), $options: "i" },
+    }).select(examAccountProjection).limit(30);
 
     return res.json(students);
   } catch (error) {
@@ -270,8 +151,8 @@ exports.searchAllStudentsByName = async (req, res) => {
 
     const students = await StudentModel.find({
       isDeleted: false,
-      name: { $regex: name, $options: "i" },
-    });
+      name: { $regex: escapeRegex(name), $options: "i" },
+    }).select(examAccountProjection);
 
     return res.json(students);
   } catch (error) {
@@ -282,7 +163,7 @@ exports.searchAllStudentsByName = async (req, res) => {
 // Admin: fetch all students
 exports.getAllStudents = async (req, res) => {
   try {
-    const students = await StudentModel.find({ isDeleted: false });
+    const students = await StudentModel.find({ isDeleted: false }).select(examAccountProjection);
     return res.json(students);
   } catch (error) {
     return res.status(500).json({ message: error.message });
@@ -293,10 +174,11 @@ exports.getAllStudents = async (req, res) => {
 exports.getStudentsByInstructor = async (req, res) => {
   try {
     const { iid } = req.params;
+    const instructor = await resolveExamInstructor(iid);
     const students = await StudentModel.find({
-      instructorId: iid,
+      ...instructorStudentsFilter(instructor),
       isDeleted: false,
-    });
+    }).select(examAccountProjection);
     return res.json(students);
   } catch (error) {
     return res.status(500).json({ message: error.message });
@@ -306,18 +188,23 @@ exports.getStudentsByInstructor = async (req, res) => {
 // Admin: fetch all outside students
 exports.getOutsideStudents = async (req, res) => {
   try {
-    const instructors = await InstructorModel.find({ isDeleted: false }).select(
-      "instructorId",
-    );
-    const instructorIds = instructors.map((i) => i.instructorId);
+    const [registry, instructors] = await Promise.all([
+      InstructorRegistry.find({ isDeleted: false }).select("instructorId"),
+      InstructorModel.find({ isDeleted: false }).select("instructorId"),
+    ]);
+    const codes = new Set(registry.map(({ instructorId }) => instructorId));
+    const instructorIds = [
+      ...registry.flatMap((record) => [String(record._id), record.instructorId]),
+      ...instructors.filter((record) => codes.has(record.instructorId)).map((record) => String(record._id)),
+    ];
 
     const students = await StudentModel.find({
       $or: [
-        { instructorId: { $exists: false } },
+        { instructorApproved: false },
         { instructorId: { $nin: instructorIds } },
       ],
       isDeleted: false,
-    });
+    }).select(examAccountProjection);
 
     return res.json(students);
   } catch (error) {
@@ -371,8 +258,13 @@ exports.adminUpdateStudent = async (req, res) => {
       updateObj.instructorName = instructorName;
     if (typeof instructorIdentity !== "undefined")
       updateObj.instructorIdentity = instructorIdentity;
-    if (typeof instructorId !== "undefined")
-      updateObj.instructorId = instructorId;
+    if (typeof instructorId !== "undefined") {
+      const instructor = await resolveExamInstructor(instructorId);
+      if (instructorId && !instructor) return res.status(400).json({ message: "Select a valid instructor." });
+      updateObj.instructorId = instructor?.registryId || "";
+      updateObj.instructorApproved = Boolean(instructor);
+      if (instructor) updateObj.instructorName = instructor.name;
+    }
 
     const updated = await StudentModel.findByIdAndUpdate(sid, updateObj, {
       new: true,
